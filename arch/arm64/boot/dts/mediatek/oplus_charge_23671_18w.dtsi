@@ -50,7 +50,7 @@
 &mtk_gauge {
 	status = "okay";
 	charger = <&sgm41542>;
-	SHUTDOWN_1_TIME = <(10)>;
+	SHUTDOWN_1_TIME = <(60)>;
 	FUELGAGUE_APPLY = <(1)>;
 	FOR_KPOC_LOGO_SHOW = <(1)>;
 	RBAT_PULL_DOWN_R = <(24000)>;
