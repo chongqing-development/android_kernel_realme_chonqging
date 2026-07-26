@@ -1281,6 +1281,7 @@ struct panel_desc {
         } delay;
 };
 
+#if 0
 static int jdi_get_modes(struct drm_panel *panel,
                             struct drm_connector *connector)
 {
@@ -1364,6 +1365,54 @@ static int jdi_get_modes(struct drm_panel *panel,
 
         return 1;
 }
+#else
+static int jdi_get_modes(struct drm_panel *panel,
+                            struct drm_connector *connector)
+{
+        struct drm_display_mode *mode;
+        struct drm_display_mode *mode2;
+        struct drm_display_mode *mode3;
+
+        mode = drm_mode_duplicate(connector->dev, &performance_mode_60hz);
+        if (!mode) {
+                dev_info(connector->dev->dev, "failed to add mode1 %ux%ux@%u\n",
+                         performance_mode_60hz.hdisplay, performance_mode_60hz.vdisplay,
+                         drm_mode_vrefresh(&performance_mode_60hz));
+                return -ENOMEM;
+        }
+
+        drm_mode_set_name(mode);
+        mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+        drm_mode_probed_add(connector, mode);
+
+        mode2 = drm_mode_duplicate(connector->dev, &performance_mode_90hz);
+        if (!mode2) {
+                dev_info(connector->dev->dev, "failed to add mode2 %ux%ux@%u\n",
+                         performance_mode_90hz.hdisplay, performance_mode_90hz.vdisplay,
+                         drm_mode_vrefresh(&performance_mode_90hz));
+                return -ENOMEM;
+        }
+        drm_mode_set_name(mode2);
+        mode2->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+        drm_mode_probed_add(connector, mode2);
+
+        mode3 = drm_mode_duplicate(connector->dev, &performance_mode_120hz);
+        if (!mode3) {
+                dev_info(connector->dev->dev, "failed to add mode3 %ux%ux@%u\n",
+                         performance_mode_120hz.hdisplay, performance_mode_120hz.vdisplay,
+                         drm_mode_vrefresh(&performance_mode_120hz));
+                return -ENOMEM;
+        }
+        drm_mode_set_name(mode3);
+        mode3->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+        drm_mode_probed_add(connector, mode3);
+
+        connector->display_info.width_mm = 70;
+        connector->display_info.height_mm = 156;
+
+        return 1;
+}
+#endif
 
 static const struct drm_panel_funcs jdi_drm_funcs = {
         .disable = jdi_disable,
