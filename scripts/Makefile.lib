@@ -388,7 +388,11 @@ dtc-tmp = $(subst $(comma),_,$(dot-target).dts.tmp)
 # mkdtimg
 #----------------------------------------------------------------------------
 quiet_cmd_mkdtimg = DTBOIMG $@
+ifeq ($(USE_DTBO_CFG),y)
+cmd_mkdtimg = mkdtimg cfg_create $@ $(srctree)/arch/$(ARCH)/boot/dts/dtboimg.cfg $(MKDTIMG_FLAGS)
+else
 cmd_mkdtimg = mkdtimg create $@ $(MKDTIMG_FLAGS) $(filter-out FORCE,$^)
+endif
 
 # Bzip2
 # ---------------------------------------------------------------------------
