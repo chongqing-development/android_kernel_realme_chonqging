@@ -34,3 +34,15 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8183-kukui-krane-sku176.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8183-pumpkin.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8516-pumpkin.dtb
+
+# Oplus6835 devices
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt6835.dtb
+dtbo-$(CONFIG_ARCH_MEDIATEK) += \
+	k6835v1_64.dtbo \
+	oplus6835_23604.dtbo \
+	oplus6835_23605.dtbo \
+	oplus6835_23606.dtbo \
+	oplus6835_23660.dtbo \
+	oplus6835_23661.dtbo \
+	oplus6835_23670.dtbo \
+	oplus6835_23671.dtbo
