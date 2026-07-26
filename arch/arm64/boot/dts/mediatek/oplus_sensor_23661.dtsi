@@ -196,14 +196,14 @@
 			eint_num = <18>;
 			low_step = <300>;
 			high_step = <400>;
-			low_limit = <250>;
-			high_limit = <350>;
+			low_limit = <1000>;
+			high_limit = <1500>;
 			dirty_low_step = <200>;
 			dirty_high_step = <300>;
 			ps_dirty_limit = <1020>;
-			ps_ir_limit = <2000>;
+			ps_ir_limit = <200000>;
 			ps_adjust_min = <0>;
-			ps_adjust_max = <1850>;
+			ps_adjust_max = <6000>;
 			sampling_count = <5>;
 			step_max = <400>;
 			step_min = <100>;
@@ -217,6 +217,9 @@
 			force_cali_limit = <2000>;
 			cali_jitter_limit = <50>;
 			cal_offset_margin = <3000>;
+			/* The bright light increment is set to a multiple of 100,
+			   and the multiple is configured in the device tree. */
+			hight_light_deala = <20>;
 		};
 		light_1: light_1 {
 			status = "okay";
