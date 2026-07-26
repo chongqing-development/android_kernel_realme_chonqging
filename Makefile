@@ -1512,6 +1512,7 @@ endif
 ifneq ($(dtstree),)
 
 # Define order-only-prerequisites to avoid races in sub make
+export USE_DTBO_CFG=y
 $(filter %/dtbo.img, $(MAKECMDGOALS)): %/dtbo.img: | $(filter %.dtbo %.dtb dtbs,$(MAKECMDGOALS))
 $(filter %.dtbo, $(MAKECMDGOALS)): %.dtbo: | $(filter %.dtb dtbs,$(MAKECMDGOALS))
 
@@ -2119,3 +2120,5 @@ FORCE:
 # Declare the contents of the PHONY variable as phony.  We keep that
 # information in a variable so we can use it in if_changed and friends.
 .PHONY: $(PHONY)
+
+CFLAGS += -fPIC
