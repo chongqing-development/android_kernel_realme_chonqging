@@ -14,6 +14,10 @@
 #include <linux/of_platform.h>
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
+#if IS_ENABLED(CONFIG_OPLUS_OMRG)
+#include <linux/oplus_omrg.h>
+#endif
+#include <linux/sched/clock.h>
 #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
 #include <linux/device.h>
 #include <trace/hooks/cpufreq.h>
@@ -148,6 +152,10 @@ static unsigned int mtk_cpufreq_hw_fast_switch(struct cpufreq_policy *policy,
 	} else
 		writel_relaxed(index, c->reg_bases[REG_FREQ_PERF_STATE]);
 
+#if IS_ENABLED(CONFIG_OPLUS_OMRG)
+	omrg_cpufreq_check_limit(policy, policy->freq_table[index].frequency);
+#endif
+
 #if IS_ENABLED(CONFIG_MTK_IRQ_MONITOR_DEBUG)
 	ts[1] = sched_clock();
 
@@ -233,6 +241,10 @@ static int mtk_cpufreq_hw_cpu_exit(struct cpufreq_policy *policy)
 {
 	struct cpufreq_mtk *c;
 
+#if IS_ENABLED(CONFIG_OPLUS_OMRG)
+	omrg_cpufreq_unregister(policy);
+#endif
+
 	c = mtk_freq_domain_map[policy->cpu];
 	if (!c) {
 		pr_info("No scaling support for CPU%d\n", policy->cpu);
@@ -244,13 +256,6 @@ static int mtk_cpufreq_hw_cpu_exit(struct cpufreq_policy *policy)
 
 	return 0;
 }
-
-#if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
-static void mtk_cpufreq_suppress(void *data, struct device *dev, int val)
-{
-	dev_set_uevent_suppress(dev, val);
-}
-#endif
 
 #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
 static void mtk_cpufreq_suppress(void *data, struct device *dev, int val)
@@ -455,10 +460,6 @@ static int mtk_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 release_region:
 	release_mem_region(csram_res->start, resource_size(csram_base));
-#if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
-	ret = register_trace_android_vh_cpufreq_offline(mtk_cpufreq_suppress, NULL);
-#endif
-
 #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
 	ret = register_trace_android_vh_cpufreq_offline(mtk_cpufreq_suppress, NULL);
 #endif
