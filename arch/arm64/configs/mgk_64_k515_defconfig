@@ -104,6 +104,11 @@ CONFIG_UFSRINGBUF_POC=n
 CONFIG_RPMB=m
 CONFIG_KEYBOARD_MTK_KPD=m
 CONFIG_KEYBOARD_MTK_PMIC=m
+CONFIG_OPLUS_DEVICE_IFNO=m
+CONFIG_OPLUS_DEVICE_INFO_MTK_PLATFORM=y
+CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY=y
+CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY=y
+
 CONFIG_TOUCHSCREEN_MTK_TOUCH="GT9895 GT9896S"
 CONFIG_TOUCHSCREEN_MT6983_ALPHA_SUPPORT=m
 CONFIG_TOUCHSCREEN_MT6895_ALPHA_SUPPORT=m
@@ -654,6 +659,46 @@ CONFIG_MTK_AEE_HANGDET=m
 CONFIG_MTK_AEE_IPANIC=m
 CONFIG_MTK_HANG_DETECT=m
 CONFIG_MTK_HANG_DETECT_DB=y
+CONFIG_MTK_SERROR_HOOK=y
+#ifdef OPLUS_FEATURE_OEM_OCDT
+CONFIG_OPLUS_SYSTEM_KERNEL=y
+CONFIG_OPLUS_FEATURE_CMDLINE=m
+CONFIG_OPLUS_FEATURE_OPLUSBOOT=m
+CONFIG_OPLUS_FEATURE_BUILDVARIANT=m
+CONFIG_OPLUS_FEATURE_OPROJECT=m
+CONFIG_SECTION_MISMATCH_WARN_ONLY=y
+CONFIG_MTK_BOOT_COMMON=m
+CONFIG_OPLUS_FEATURE_BOOTARGS=m
+CONFIG_OPLUS_FEATURE_MTK_FORCE_SHUTDOWN=m
+#endif /* OPLUS_FEATURE_OEM_OCDT */
+
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+CONFIG_DUMP_TASKS_MEM=m
+#endif
+
+CONFIG_OPLUS_FEATURE_UXMEM_OPT=m
+CONFIG_OPLUS_FEATURE_DYNAMIC_READAHEAD=m
+
+CONFIG_OPLUS_FEATURE_SHUTDOWN_DETECT=m
+CONFIG_OPLUS_FEATURE_PHOENIX=m
+CONFIG_OPLUS_FEATURE_KMSG_WB=m
+CONFIG_OPLUS_FEATURE_FDLEAK_CHECK=m
+CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE=m
+CONFIG_OPLUS_FEATURE_THEIA=m
+CONFIG_OPLUS_FEATURE_DEATH_HEALER=m
+CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE=m
+CONFIG_OPLUS_FEATURE_SAUPWK=m
+CONFIG_OPLUS_FEATURE_INIT_WATCHDOG=m
+CONFIG_OPLUS_FEATURE_KEYEVENT_HANDLER=m
+CONFIG_OPLUS_FEATURE_COMBKEY_MONITOR=m
+
+#ifdef OPLUS_FEATURE_LAST_BOOT_REASON
+CONFIG_OPLUS_FEATURE_PMIC_MONITOR_MTK=m
+#endif /*OPLUS_FEATURE_LAST_BOOT_REASON*/
+#ifdef OPLUS_FEATURE_LAST_BOOT_REASON
+CONFIG_OPLUS_FEATURE_LAST_BOOT_REASON=m
+#endif /*OPLUS_FEATURE_LAST_BOOT_REASON*/
+
 CONFIG_EXT_MODULES="../vendor/mediatek/kernel_modules/connectivity/common ../vendor/mediatek/kernel_modules/connectivity/conninfra ../vendor/mediatek/kernel_modules/connectivity/connfem ../vendor/mediatek/kernel_modules/connectivity/gps/gps_stp ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v010 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v030 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v050 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v051 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v060 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v061 ../vendor/mediatek/kernel_modules/connectivity/gps/gps_pwr ../vendor/mediatek/kernel_modules/connectivity/gps/gps_scp ../vendor/mediatek/kernel_modules/gpu ../vendor/mediatek/kernel_modules/connectivity/fmradio ../vendor/mediatek/kernel_modules/connectivity/wlan/adaptor ../vendor/mediatek/kernel_modules/connectivity/wlan/adaptor/wlan_page_pool ../vendor/mediatek/kernel_modules/connectivity/bt/linux_v2 ../vendor/mediatek/kernel_modules/hbt_driver_cus"
 CONFIG_MTK_BTM_V1=m
 CONFIG_MTK_BTM_SUPPORT=m
