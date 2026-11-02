@@ -36,6 +36,12 @@
 #include "mtk_cam-seninf-route.h"
 #include "imgsensor-user.h"
 #include "mtk_cam-seninf-ca.h"
+#if defined(OPLUS_FEATURE_CAMERA_COMMON) && defined(CONFIG_OPLUS_CAM_EVENT_REPORT_MODULE)
+#include "oplus_cam_olc_exception.h"
+#endif
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#define OPLUS_FEATURE_CAMERA_COMMON
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
 
 #define ESD_RESET_SUPPORT 1
 #define V4L2_CID_MTK_SENINF_BASE	(V4L2_CID_USER_BASE | 0xf000)
@@ -2986,6 +2992,9 @@ int mtk_cam_seninf_check_timeout(struct v4l2_subdev *sd, u64 time_after_sof)
 	struct v4l2_subdev *sensor_sd = ctx->sensor_sd;
 	struct v4l2_ctrl *ctrl;
 
+	#if defined(OPLUS_FEATURE_CAMERA_COMMON) && defined(CONFIG_OPLUS_CAM_EVENT_REPORT_MODULE)
+	struct olc_params olc_data;
+	#endif
 	ctrl = v4l2_ctrl_find(sensor_sd->ctrl_handler, V4L2_CID_MTK_SOF_TIMEOUT_VALUE);
 	if (!ctrl) {
 		dev_info(ctx->dev, "no timeout value in subdev %s\n", sd->name);
@@ -3008,6 +3017,17 @@ int mtk_cam_seninf_check_timeout(struct v4l2_subdev *sd, u64 time_after_sof)
 		ret,
 		SOF_TIMEOUT_RATIO,
 		val);
+
+	#if defined(OPLUS_FEATURE_CAMERA_COMMON) && defined(CONFIG_OPLUS_CAM_EVENT_REPORT_MODULE)
+	if (ret == -1) {
+		/*report the exception data to imgsensor module.*/
+		olc_data.frame_time = frame_time;
+		olc_data.time_after_sof = time_after_sof;
+		strncpy(olc_data.name, sd->name, strlen(sd->name));
+		sensor_sd->ops->core->command(sensor_sd, V4L2_CMD_OLC_EVENT, &olc_data);
+	}
+	#endif /* OPLUS_FEATURE_CAMERA_COMMON */
+
 	return ret;
 }
 
