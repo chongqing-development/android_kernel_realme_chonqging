@@ -17,13 +17,14 @@
 #define _TRACE_HOOK_MM_H
 
 #include <trace/hooks/vendor_hooks.h>
+#include <../mm/slab.h>
+
 
 #ifdef __GENKSYMS__
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/rwsem.h>
-#include <../mm/slab.h>
 #endif
 
 struct oom_control;
@@ -33,6 +34,7 @@ struct address_space;
 struct page_vma_mapped_walk;
 struct cma;
 struct compact_control;
+struct readahead_control;
 
 DECLARE_RESTRICTED_HOOK(android_rvh_set_skip_swapcache_flags,
 			TP_PROTO(gfp_t *flags),
