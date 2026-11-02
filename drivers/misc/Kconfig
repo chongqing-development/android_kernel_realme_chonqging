@@ -515,4 +515,8 @@ source "drivers/misc/cardreader/Kconfig"
 source "drivers/misc/habanalabs/Kconfig"
 source "drivers/misc/uacce/Kconfig"
 source "drivers/misc/pvpanic/Kconfig"
+
+#ifdef CONFIG_OPLUS_TRIKEY_HALL
+source "drivers/misc/tri_state_key/Kconfig"
+#endif CONFIG_OPLUS_TRIKEY_HALL
 endmenu
