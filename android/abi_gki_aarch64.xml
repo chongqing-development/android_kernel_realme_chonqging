@@ -19461,27 +19461,27 @@
       </function-type>
       <pointer-type-def type-id='ff751355' size-in-bits='64' id='1d22b7e5'/>
       <qualified-type-def type-id='e4992400' const='yes' id='1d22df6b'/>
-      <class-decl name='size_class' size-in-bits='1088' is-struct='yes' visibility='default' filepath='mm/zsmalloc.c' line='200' column='1' id='1d27b1eb'>
+      <class-decl name='size_class' size-in-bits='1088' is-struct='yes' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='200' column='1' id='1d27b1eb'>
         <data-member access='public' layout-offset-in-bits='0'>
-          <var-decl name='lock' type-id='fb4018a0' visibility='default' filepath='mm/zsmalloc.c' line='201' column='1'/>
+          <var-decl name='lock' type-id='fb4018a0' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='201' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='64'>
-          <var-decl name='fullness_list' type-id='a8e1fb22' visibility='default' filepath='mm/zsmalloc.c' line='202' column='1'/>
+          <var-decl name='fullness_list' type-id='a8e1fb22' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='202' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='576'>
-          <var-decl name='size' type-id='95e97e5e' visibility='default' filepath='mm/zsmalloc.c' line='207' column='1'/>
+          <var-decl name='size' type-id='95e97e5e' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='207' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='608'>
-          <var-decl name='objs_per_zspage' type-id='95e97e5e' visibility='default' filepath='mm/zsmalloc.c' line='208' column='1'/>
+          <var-decl name='objs_per_zspage' type-id='95e97e5e' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='208' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='640'>
-          <var-decl name='pages_per_zspage' type-id='95e97e5e' visibility='default' filepath='mm/zsmalloc.c' line='210' column='1'/>
+          <var-decl name='pages_per_zspage' type-id='95e97e5e' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='210' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='672'>
-          <var-decl name='index' type-id='f0981eeb' visibility='default' filepath='mm/zsmalloc.c' line='212' column='1'/>
+          <var-decl name='index' type-id='f0981eeb' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='212' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='704'>
-          <var-decl name='stats' type-id='3097f179' visibility='default' filepath='mm/zsmalloc.c' line='213' column='1'/>
+          <var-decl name='stats' type-id='3097f179' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='213' column='1'/>
         </data-member>
       </class-decl>
       <function-type size-in-bits='64' id='1d2b3133'>
@@ -22036,42 +22036,42 @@
         <parameter type-id='ccf3b302'/>
         <return type-id='88370ce9'/>
       </function-type>
-      <class-decl name='zs_pool' size-in-bits='17920' is-struct='yes' visibility='default' filepath='mm/zsmalloc.c' line='252' column='1' id='2399d05d'>
+      <class-decl name='zs_pool' size-in-bits='17920' is-struct='yes' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='252' column='1' id='2399d05d'>
         <data-member access='public' layout-offset-in-bits='0'>
-          <var-decl name='name' type-id='80f4b756' visibility='default' filepath='mm/zsmalloc.c' line='253' column='1'/>
+          <var-decl name='name' type-id='80f4b756' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='253' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='64'>
-          <var-decl name='size_class' type-id='c69c228b' visibility='default' filepath='mm/zsmalloc.c' line='255' column='1'/>
+          <var-decl name='size_class' type-id='c69c228b' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='255' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='16384'>
-          <var-decl name='handle_cachep' type-id='f3b4aca8' visibility='default' filepath='mm/zsmalloc.c' line='256' column='1'/>
+          <var-decl name='handle_cachep' type-id='f3b4aca8' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='256' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='16448'>
-          <var-decl name='zspage_cachep' type-id='f3b4aca8' visibility='default' filepath='mm/zsmalloc.c' line='257' column='1'/>
+          <var-decl name='zspage_cachep' type-id='f3b4aca8' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='257' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='16512'>
-          <var-decl name='pages_allocated' type-id='f22a8abb' visibility='default' filepath='mm/zsmalloc.c' line='259' column='1'/>
+          <var-decl name='pages_allocated' type-id='f22a8abb' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='259' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='16576'>
-          <var-decl name='stats' type-id='7cee8a3d' visibility='default' filepath='mm/zsmalloc.c' line='261' column='1'/>
+          <var-decl name='stats' type-id='7cee8a3d' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='261' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='16640'>
-          <var-decl name='shrinker' type-id='27cb404f' visibility='default' filepath='mm/zsmalloc.c' line='264' column='1'/>
+          <var-decl name='shrinker' type-id='27cb404f' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='264' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='17152'>
-          <var-decl name='inode' type-id='7e666abe' visibility='default' filepath='mm/zsmalloc.c' line='270' column='1'/>
+          <var-decl name='inode' type-id='7e666abe' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='270' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='17216'>
-          <var-decl name='free_work' type-id='ef9025d0' visibility='default' filepath='mm/zsmalloc.c' line='271' column='1'/>
+          <var-decl name='free_work' type-id='ef9025d0' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='271' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='17600'>
-          <var-decl name='migration_wait' type-id='cff07063' visibility='default' filepath='mm/zsmalloc.c' line='273' column='1'/>
+          <var-decl name='migration_wait' type-id='cff07063' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='273' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='17792'>
-          <var-decl name='isolated_pages' type-id='f22a8abb' visibility='default' filepath='mm/zsmalloc.c' line='274' column='1'/>
+          <var-decl name='isolated_pages' type-id='f22a8abb' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='274' column='1'/>
         </data-member>
         <data-member access='public' layout-offset-in-bits='17856'>
-          <var-decl name='destroying' type-id='b50a4934' visibility='default' filepath='mm/zsmalloc.c' line='275' column='1'/>
+          <var-decl name='destroying' type-id='b50a4934' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='275' column='1'/>
         </data-member>
       </class-decl>
       <pointer-type-def type-id='e9bea70c' size-in-bits='64' id='23a0ad0a'/>
@@ -27813,9 +27813,9 @@
         <parameter type-id='a585cbc4'/>
         <return type-id='48b5725f'/>
       </function-type>
-      <class-decl name='zs_size_stat' size-in-bits='384' is-struct='yes' visibility='default' filepath='mm/zsmalloc.c' line='171' column='1' id='3097f179'>
+      <class-decl name='zs_size_stat' size-in-bits='384' is-struct='yes' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='171' column='1' id='3097f179'>
         <data-member access='public' layout-offset-in-bits='0'>
-          <var-decl name='objs' type-id='f0691bd3' visibility='default' filepath='mm/zsmalloc.c' line='172' column='1'/>
+          <var-decl name='objs' type-id='f0691bd3' visibility='default' filepath='mm/oplus_mm/thp_zsmalloc/zsmalloc.c' line='172' column='1'/>
         </data-member>
       </class-decl>
       <function-type size-in-bits='64' id='3098b525'>
@@ -168162,7 +168162,7 @@
       </function-decl>
     </abi-instr>
   </abi-corpus>
-  <abi-corpus version='2.1' path='zsmalloc.ko' architecture='elf-arm-aarch64'>
+  <abi-corpus version='2.1' path='oplus_bsp_zsmalloc.ko' architecture='elf-arm-aarch64'>
     <elf-function-symbols>
       <elf-symbol name='zs_compact' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes' crc='0x5da67adc'/>
       <elf-symbol name='zs_create_pool' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes' crc='0xbcf1f0e6'/>
