@@ -63,4 +63,8 @@ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-y				+= mediatek/
 obj-$(CONFIG_OPEN_DICE)		+= open-dice.o
 
+#ifdef OPLUS_FEATURE_TP_BASIC
+#oplus add for vib aw86927
+obj-y += aw8697_haptic/
+#endif
 obj-y += tri_state_key/
