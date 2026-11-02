@@ -18,6 +18,11 @@
 #include "mtk_drm_ddp.h"
 #include "mtk_drm_ddp_comp.h"
 #include "mtk_drm_mmp.h"
+#include "mtk_drm_trace.h"
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#include "oplus_adfr.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
 
 #define MAX_ENTER_IDLE_RSZ_RATIO 300
 
@@ -116,6 +121,12 @@ static void mtk_drm_idlemgr_enter_idle_nolock(struct drm_crtc *crtc)
 
 	if (!output_comp)
 		return;
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	if (oplus_adfr_is_support() && !index && !mtk_crtc->ddp_mode) {
+		oplus_adfr_handle_idle_mode(crtc, true);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
 
 	mode = mtk_dsi_is_cmd_mode(output_comp);
 	idle_interval = mtk_drm_get_idle_check_interval(crtc);

@@ -19,8 +19,12 @@
 #define DISP_C3D_SRAM_SIZE_17BIN (17 * 17 * 17)
 #define DISP_C3D_SRAM_SIZE_9BIN (9 * 9 * 9)
 
-static bool gPktReused[HW_ENGINE_NUM];
+static bool gPktReused;
 static struct cmdq_reuse reuse_c3d0[4913 * 2], reuse_c3d1[4913 * 2];
+
+#ifdef OPLUS_FEATURE_DISPLAY
+extern bool g_c3d_probe_ready;
+#endif
 
 struct DISP_C3D_REG_17BIN {
 	unsigned int lut3d_reg[C3D_3DLUT_SIZE_17BIN];
@@ -1305,6 +1309,9 @@ static int mtk_disp_c3d_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to add component: %d\n", ret);
 		mtk_ddp_comp_pm_disable(&priv->ddp_comp);
 	}
+#ifdef OPLUS_FEATURE_DISPLAY
+	g_c3d_probe_ready = true;
+#endif
 	pr_notice("%s-\n", __func__);
 
 	return ret;
