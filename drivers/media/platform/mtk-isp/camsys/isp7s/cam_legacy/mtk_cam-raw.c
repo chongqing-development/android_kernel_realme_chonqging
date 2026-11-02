@@ -50,6 +50,13 @@
 #include <aee.h>
 #endif
 
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#define OPLUS_FEATURE_CAMERA_COMMON
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define USING_CUSTOM_PRATE 1
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 static unsigned int debug_raw;
 module_param(debug_raw, uint, 0644);
 MODULE_PARM_DESC(debug_raw, "activates debug info");
@@ -2675,7 +2682,11 @@ bool mtk_raw_resource_calc(struct mtk_cam_device *cam,
 	calc.mipi_pixel_rate = (s64)(in_w + res->hblank) * (in_h + res->vblank)
 		* res->interval.denominator / res->interval.numerator;
 	/* fake preisp line time from customized prate */
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	if (mtk_cam_scen_is_ext_isp(&res->scen) && pixel_rate > 0) {
+#else /* OPLUS_FEATURE_CAMERA_COMMON */
+	if ((mtk_cam_scen_is_ext_isp(&res->scen) || USING_CUSTOM_PRATE) && pixel_rate > 0) {
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
 		calc.line_time = 1000000000L * in_w / pixel_rate;
 		dev_info(cam->dev, "preisp:res linetime:%lld, prate:%lld, w:%d\n",
 			calc.line_time, pixel_rate, in_w);
