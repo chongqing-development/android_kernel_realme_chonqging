@@ -166,8 +166,8 @@
 #define IMX058_SENSOR_ID                        0x0058
 #define IMX582_SENSOR_ID                        0x0582
 #define IMX596_SENSOR_ID                        0x0596
-#define IMX581_SENSOR_ID                        0x0581
 #define IMX6632X_SENSOR_ID                      0x0663
+#define IMX581_SENSOR_ID                        0x0581
 #define IMX890_SENSOR_ID                        0x0890
 /*OV*/
 #define OV23850_SENSOR_ID                       0x023850
@@ -266,8 +266,8 @@
 #define S5K5E8YXREAR2_SENSOR_ID                 0x5e81
 #define S5K5E9_SENSOR_ID                        0x559b
 #define S5KHM2SP_SENSOR_ID                      0x1AD2
-#define S5KJN1_SENSOR_ID                        0x38E1
 #define S5K4H7ALPHA_SENSOR_ID                   0x487B
+#define S5KJN1_SENSOR_ID                        0x38E1
 #define S5KGD2_SENSOR_ID                        0x0842
 
 /*HI*/
