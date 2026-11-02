@@ -468,9 +468,13 @@ CONFIG_MTK_MBOX=m
 CONFIG_RPMSG_MTK=m
 CONFIG_MTK_TINYSYS_SCP_SUPPORT=m
 CONFIG_MTK_TINYSYS_SCP_LOGGER_SUPPORT=y
+CONFIG_MTK_TINYSYS_SCP_DEBUG_SUPPORT=y
 CONFIG_MTK_TINYSYS_SSPM_SUPPORT=m
 CONFIG_MTK_TINYSYS_SSPM_V3=y
 CONFIG_MTK_TINYSYS_VCP_SUPPORT=m
+#ifdef OPLUS_BUG_DEBUG
+CONFIG_MTK_TINYSYS_VCP_DEBUG_SUPPORT=y
+#endif /*OPLUS_BUG_DEBUG*/
 CONFIG_MTK_AUDIO_IPI=m
 CONFIG_SND_SOC_MTK_AUDIO_DSP=m
 CONFIG_MTK_AUDIODSP_SUPPORT=m
@@ -724,6 +728,22 @@ CONFIG_OPLUS_FEATURE_PMIC_MONITOR_MTK=m
 #ifdef OPLUS_FEATURE_LAST_BOOT_REASON
 CONFIG_OPLUS_FEATURE_LAST_BOOT_REASON=m
 #endif /*OPLUS_FEATURE_LAST_BOOT_REASON*/
+
+#ifdef OPLUS_FEATURE_FEEDBACK
+CONFIG_OPLUS_FEATURE_FEEDBACK=m
+#endif /*OPLUS_FEATURE_FEEDBACK*/
+
+#ifdef OPLUS_FEATURE_OLC
+CONFIG_OPLUS_FEATURE_OLC=m
+#endif /* OPLUS_FEATURE_OLC */
+
+#ifdef OPLUS_FEATURE_SIM_DETECT
+CONFIG_SIM_DETECT=m
+#endif
+
+#ifdef OPLUS_FEATURE_ESIM
+CONFIG_OPLUS_GPIO=m
+#endif
 
 CONFIG_EXT_MODULES="../vendor/mediatek/kernel_modules/connectivity/common ../vendor/mediatek/kernel_modules/connectivity/conninfra ../vendor/mediatek/kernel_modules/connectivity/connfem ../vendor/mediatek/kernel_modules/connectivity/gps/gps_stp ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v010 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v030 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v050 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v051 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v060 ../vendor/mediatek/kernel_modules/connectivity/gps/data_link/plat/v061 ../vendor/mediatek/kernel_modules/connectivity/gps/gps_pwr ../vendor/mediatek/kernel_modules/connectivity/gps/gps_scp ../vendor/mediatek/kernel_modules/gpu ../vendor/mediatek/kernel_modules/connectivity/fmradio ../vendor/mediatek/kernel_modules/connectivity/wlan/adaptor ../vendor/mediatek/kernel_modules/connectivity/wlan/adaptor/wlan_page_pool ../vendor/mediatek/kernel_modules/connectivity/bt/linux_v2 ../vendor/mediatek/kernel_modules/hbt_driver_cus"
 CONFIG_MTK_BTM_V1=m
