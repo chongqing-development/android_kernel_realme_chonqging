@@ -415,6 +415,11 @@ void mtk_release_fence(unsigned int session_id, unsigned int layer_id,
 	current_timeline_idx = layer_info->timeline_idx;
 	num_fence = fence - layer_info->timeline_idx;
 	if (num_fence > 0) {
+		mtk_drm_trace_c("%d|layer_fence_release-%s-%d|%d",
+			DRM_TRACE_FENCE_ID,
+			mtk_fence_session_mode_spy(session_id),
+			layer_id, fence);
+
 		mtk_sync_timeline_inc(layer_info->timeline, num_fence, 0);
 		layer_info->timeline_idx = fence;
 
@@ -425,6 +430,10 @@ void mtk_release_fence(unsigned int session_id, unsigned int layer_id,
 				MTK_SESSION_DEV(session_id), layer_id,
 				current_timeline_idx, fence);
 
+		mtk_drm_trace_c("%d|layer_fence_release-%s-%d|%d",
+			DRM_TRACE_FENCE_ID,
+			mtk_fence_session_mode_spy(session_id),
+			layer_id, 0);
 	} else {
 		mutex_unlock(&layer_info->sync_lock);
 		return;
@@ -552,8 +561,10 @@ int mtk_release_present_fence(unsigned int session_id, unsigned int fence_idx, k
 		idx = 3;
 
 	CRTC_MMP_MARK(idx, release_present_fence, 0, fence_idx);
+	drm_trace_tag_value("release_present_fence", fence_idx);
 
-	mtk_drm_trace_end();
+	mtk_drm_trace_end("present_fence_rel:%s-%d",
+		mtk_fence_session_mode_spy(session_id), fence_idx);
 
 done:
 	mutex_unlock(&layer_info->sync_lock);
@@ -611,7 +622,8 @@ int mtk_release_sf_present_fence(unsigned int session_id,
 
 	CRTC_MMP_MARK(idx, release_sf_present_fence, 0, fence_idx);
 
-	mtk_drm_trace_end();
+	mtk_drm_trace_end("sf_present_fence_rel:%s-%d",
+		mtk_fence_session_mode_spy(session_id), fence_idx);
 
 done:
 	mutex_unlock(&layer_info->sync_lock);

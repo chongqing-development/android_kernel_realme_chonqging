@@ -18,6 +18,11 @@
 #include "mtk_drm_ddp.h"
 #include "mtk_drm_ddp_comp.h"
 #include "mtk_drm_mmp.h"
+#include "mtk_drm_trace.h"
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#include "oplus_adfr.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
 
 #define MAX_ENTER_IDLE_RSZ_RATIO 300
 
@@ -117,6 +122,12 @@ static void mtk_drm_idlemgr_enter_idle_nolock(struct drm_crtc *crtc)
 	if (!output_comp)
 		return;
 
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	if (oplus_adfr_is_support() && !index && !mtk_crtc->ddp_mode) {
+		oplus_adfr_handle_idle_mode(crtc, true);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
+
 	mode = mtk_dsi_is_cmd_mode(output_comp);
 	idle_interval = mtk_drm_get_idle_check_interval(crtc);
 	CRTC_MMP_EVENT_START(index, enter_idle, mode, idle_interval);
@@ -143,6 +154,8 @@ static void mtk_drm_idlemgr_leave_idle_nolock(struct drm_crtc *crtc)
 
 	mode = mtk_dsi_is_cmd_mode(output_comp);
 	CRTC_MMP_EVENT_START(index, leave_idle, mode, 0);
+	drm_trace_tag_start("Kick idle");
+
 
 	if (mode)
 		mtk_drm_cmd_mode_leave_idle(crtc);
@@ -150,6 +163,7 @@ static void mtk_drm_idlemgr_leave_idle_nolock(struct drm_crtc *crtc)
 		mtk_drm_vdo_mode_leave_idle(crtc);
 
 	CRTC_MMP_EVENT_END(index, leave_idle, mode, 0);
+	drm_trace_tag_end("Kick idle");
 }
 
 bool mtk_drm_is_idle(struct drm_crtc *crtc)
