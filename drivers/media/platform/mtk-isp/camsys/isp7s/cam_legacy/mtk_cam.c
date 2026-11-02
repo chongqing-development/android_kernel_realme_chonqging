@@ -6464,7 +6464,6 @@ static int isp_composer_handle_ack(struct mtk_cam_device *cam,
 			raw_dev->last_sof_time_ns = ktime_get_boottime_ns();
 			raw_dev->sof_count =  1;
 		}
-
 		return 0;
 	}
 	spin_lock(&ctx->composed_buffer_list.lock);
@@ -7442,7 +7441,6 @@ void mtk_cam_dev_req_enqueue(struct mtk_cam_device *cam,
 			if (mtk_cam_ctx_has_raw(ctx) && initial_frame &&
 			    mtk_cam_scen_is_m2m(scen))
 				mtk_ctx_m2m_watchdog_start(ctx, 4);
-
 			dev_dbg(cam->dev, "%s:ctx:%d:req:%d(%s) enqueue ctx_used:0x%x,streaming_ctx:0x%x,job cnt:%d, running(%d)\n",
 				__func__, stream_id, req_stream_data->frame_seq_no,
 				req->req.debug_str, req->ctx_used, cam->streaming_ctx,

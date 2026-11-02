@@ -576,6 +576,7 @@ enum mtk_ddp_io_cmd {
 	DSI_HBM_WAIT,
 	LCM_ATA_CHECK,
 	DSI_SET_CRTC_AVAIL_MODES,
+	DSI_SET_CRTC_SCALING_MODE_MAPPING,
 	DSI_FILL_CONNECTOR_PROP_CAPS,
 	DSI_TIMING_CHANGE,
 	GET_PANEL_NAME,
@@ -782,6 +783,7 @@ struct mtk_ddp_comp {
 	u32 fbdc_bw;
 	u32 hrt_bw;
 	bool in_scaling_path;
+	bool clk_on;
 };
 
 static inline void mtk_ddp_comp_config_overhead(struct mtk_ddp_comp *comp,

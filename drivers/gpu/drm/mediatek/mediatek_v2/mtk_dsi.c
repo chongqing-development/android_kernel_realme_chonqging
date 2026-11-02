@@ -17,6 +17,8 @@
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/component.h>
+#include <linux/panic_notifier.h>
+#include <linux/kdebug.h>
 #include <linux/irq.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -47,6 +49,7 @@
 #include "mtk_drm_arr.h"
 #include "mtk_panel_ext.h"
 #include "mtk_disp_notify.h"
+#include "mtk_drm_trace.h"
 #include "mtk_dsi.h"
 #include "mtk_drm_ddp.h"
 #include "platform/mtk_drm_platform.h"
@@ -1575,6 +1578,33 @@ static void mtk_dsi_ps_control_vact(struct mtk_dsi *dsi)
 	}
 }
 
+static void mtk_dsi_lane_num(struct mtk_dsi *dsi)
+{
+	u32 tmp_reg;
+
+	switch (dsi->lanes) {
+	case 1:
+		tmp_reg = 0x1 << 2;
+		break;
+	case 2:
+		tmp_reg = 0x3 << 2;
+		break;
+	case 3:
+		tmp_reg = 0x7 << 2;
+		break;
+	case 4:
+		tmp_reg = 0xf << 2;
+		break;
+	default:
+		tmp_reg = 0xf << 2;
+		break;
+	}
+
+	tmp_reg = tmp_reg | 0x00010200;
+	DDPMSG("%s write Txrx value = 0x%x \n", __func__, tmp_reg);
+	writel(tmp_reg, dsi->regs + DSI_TXRX_CTRL);
+}
+
 static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 {
 	u32 tmp_reg;
@@ -2181,7 +2211,7 @@ static void mtk_dsi_cmdq_size_sel(struct mtk_dsi *dsi)
 	mtk_dsi_mask(dsi, DSI_CMDQ_SIZE, CMDQ_SIZE_SEL, CMDQ_SIZE_SEL);
 }
 
-static u16 mtk_get_gpr(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
+u16 mtk_get_gpr(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 {
 	struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
 	struct drm_crtc *crtc;
@@ -2520,6 +2550,8 @@ irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id)
 		}
 
 		if (status & FRAME_DONE_INT_FLAG) {
+			drm_trace_tag_mark("dsi_frame_done");
+
 			if (priv && mtk_drm_helper_get_opt(priv->helper_opt,
 							   MTK_DRM_OPT_HBM))
 				wakeup_dsi_wq(&dsi->frame_done);
@@ -3350,6 +3382,7 @@ static void mtk_dsi_clk_change_6382(struct mtk_dsi *dsi, int en)
 		cmdq_pkt_flush(cmdq_handle);
 		cmdq_pkt_destroy(cmdq_handle);
 	}
+	printk("[%s : %d] mipi hopping data_rate = %d, Hfp = %d\n",  __func__, __LINE__, data_rate, ext->params->dyn.hfp);
 
 done:
 	CRTC_MMP_EVENT_END(index, clk_change,
@@ -3714,9 +3747,11 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 		}
 	}
 
-	if (mtk_dsi_is_cmd_mode(&dsi->ddp_comp) && dsi->ext && dsi->ext->is_connected == -1)
+	if (mtk_dsi_is_cmd_mode(&dsi->ddp_comp) && dsi->ext && dsi->ext->is_connected != 1) {
 		check_panel_connection(crtc, dsi);
-	DDPINFO("%s -\n", __func__);
+		DDPMSG("%s panel_connection:%d\n", __func__, dsi->ext->is_connected);
+	}
+	DDPMSG("%s -,dsi->output_en = %d\n", __func__,dsi->output_en);
 
 	dsi->pending_switch = false;
 	dsi->output_en = true;
@@ -3799,7 +3834,7 @@ static void mtk_output_dsi_disable(struct mtk_dsi *dsi, struct cmdq_pkt *cmdq_ha
 	unsigned int crtc_idx = 0;
 	bool skip_panel_switch = mtk_dsi_skip_panel_switch(dsi);
 
-	DDPINFO("%s+ doze_enabled:%d\n", __func__, new_doze_state);
+	DDPMSG("%s+ doze_enabled:%d,dsi->output_en = %d\n", __func__, new_doze_state,dsi->output_en);
 	if (!dsi->output_en)
 		return;
 
@@ -3817,7 +3852,7 @@ static void mtk_output_dsi_disable(struct mtk_dsi *dsi, struct cmdq_pkt *cmdq_ha
 	crtc_idx = drm_crtc_index(crtc);
 	if (priv && mtk_drm_helper_get_opt(priv->helper_opt, MTK_DRM_OPT_SPHRT)
 			&& crtc_idx < MAX_CRTC && priv->usage[crtc_idx] == DISP_OPENING) {
-		DDPINFO("%s %d wait for opening\n", __func__, drm_crtc_index(crtc));
+		DDPMSG("%s %d wait for opening\n", __func__, drm_crtc_index(crtc));
 		if (cmdq_handle)
 			cmdq_pkt_destroy(cmdq_handle);
 		goto SKIP_WAIT_FRAME_DONE;
@@ -3956,6 +3991,8 @@ static void mtk_dsi_encoder_disable(struct drm_encoder *encoder)
 			(unsigned long)crtc, index);
 
 	DDPINFO("%s\n", __func__);
+	DDPPR_ERR("mtk_dsi_encoder_disable doze status=%d+\n",mtk_dsi_doze_state(dsi));
+
 	mtk_drm_idlemgr_kick(__func__, crtc, 0);
 
 	/* TODO: assume DSI0 would use for primary display so far */
@@ -4351,7 +4388,7 @@ static int mtk_dsi_stop_vdo_mode(struct mtk_dsi *dsi, void *handle)
 	CRTC_MMP_MARK(index, esd_check, 3, 3);
 	if (is_bdg_supported()) {
 		mipi_dsi_write_6382(dsi, handle, stopdsi, 8);
-		cmdq_pkt_sleep(handle, CMDQ_US_TO_TICK(25), CMDQ_GPR_R07); //need wait 5 lines, 25us
+		cmdq_pkt_sleep(handle, CMDQ_US_TO_TICK(50), CMDQ_GPR_R07); //need wait 5 lines, 25us
 		mipi_dsi_write_6382(dsi, handle, sw_reset0, 8);
 		mipi_dsi_write_6382(dsi, handle, sw_reset1, 8);
 		mipi_dsi_write_6382(dsi, handle, setcmd, 8);
@@ -9737,6 +9774,8 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 		struct mtk_drm_private *priv = (crtc->base).dev->dev_private;
 		struct drm_display_mode *m;
 		struct drm_display_mode *avail_modes;
+		struct mtk_panel_params **panel_params;
+		struct mtk_panel_params **tmp;
 		unsigned int i = 0, num = 0;
 		u16 vdisplay = 0;
 
@@ -9745,8 +9784,13 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 			num++;
 
 		avail_modes = vzalloc(sizeof(struct drm_display_mode) * num);
+		panel_params = vzalloc(sizeof(struct mtk_panel_params*) * num);
+
 		list_for_each_entry(m, &dsi->conn.modes, head) {
 			drm_mode_copy(&avail_modes[i], m);
+			if (panel_ext && panel_ext->funcs && panel_ext->funcs->ext_param_get)
+				panel_ext->funcs->ext_param_get(dsi->panel, &dsi->conn,
+							&panel_params[i], i);
 			i++;
 
 			if (vdisplay == 0)
@@ -9772,10 +9816,33 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 			crtc->res_switch = RES_SWITCH_NO_USE;
 
 		m = crtc->avail_modes;
+		tmp = crtc->panel_params;
 		crtc->avail_modes_num = num;
 		crtc->avail_modes = avail_modes;
+		crtc->panel_params = panel_params;
 		if (m)
 			vfree(m);
+		if (tmp)
+			vfree(tmp);
+	}
+		break;
+	case DSI_SET_CRTC_SCALING_MODE_MAPPING:
+	{
+		struct mtk_drm_crtc *crtc = (struct mtk_drm_crtc *)params;
+		unsigned int i = 0;
+
+		panel_ext = mtk_dsi_get_panel_ext(comp);
+		if (panel_ext && panel_ext->funcs
+			&& panel_ext->funcs->scaling_mode_mapping
+			&& (crtc->avail_modes_num > 0)) {
+			for (i = 0; i < crtc->avail_modes_num; i++) {
+				crtc->scaling_ctx.mode_mapping[i] = panel_ext->funcs->scaling_mode_mapping(i);
+				DDPMSG("mode_mapping: %d->%d\n", i, crtc->scaling_ctx.mode_mapping[i]);
+			}
+			crtc->scaling_ctx.cust_mode_mapping = true;
+		} else {
+			crtc->scaling_ctx.cust_mode_mapping = false;
+		}
 	}
 		break;
 	case DSI_FILL_CONNECTOR_PROP_CAPS:
@@ -9928,6 +9995,17 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 		*base_bw = mtk_dsi_get_frame_hrt_bw_base_by_datarate(crtc, dsi);
 	}
 		break;
+	case LCM_CABC:
+        {
+                struct mtk_dsi *dsi =
+                        container_of(comp, struct mtk_dsi, ddp_comp);
+                if (dsi->ext && dsi->ext->funcs
+                        && dsi->ext->funcs->cabc_switch) {
+                        DDPINFO("%s cabc_switch\n", __func__);
+                        dsi->ext->funcs->cabc_switch(dsi,mipi_dsi_dcs_write_gce,handle,*(int *)params);
+                }
+        }
+                break;
 	case GET_FRAME_HRT_BW_BY_MODE:
 	{
 		struct mtk_drm_crtc *crtc = comp->mtk_crtc;
@@ -10601,6 +10679,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	struct resource *regs;
 	int irq_num;
 	int comp_id;
+	bool panel_lock = false;
 	int ret;
 	unsigned int alias;
 
@@ -10616,14 +10695,17 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	dsi->is_slave = of_property_read_bool(dev->of_node,
 					      "mediatek,dual-dsi-slave");
 
+	mtk_panel_lock();
 	ret = mipi_dsi_host_register(&dsi->host);
 	if (ret < 0) {
 		dev_err(dev, "failed to register DSI host: %d\n", ret);
+		mtk_panel_unlock();
 		return -EPROBE_DEFER;
 	}
 	of_id = of_match_device(mtk_dsi_of_match, &pdev->dev);
 	if (!of_id) {
 		dev_err(dev, "DSI device match failed\n");
+		mtk_panel_unlock();
 		return -EPROBE_DEFER;
 	}
 
@@ -10635,6 +10717,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 			remote_node = of_graph_get_remote_port_parent(endpoint);
 			if (!remote_node) {
 				dev_err(dev, "No panel connected\n");
+				panel_lock = true;
 				ret = -ENODEV;
 				goto error;
 			}
@@ -10645,6 +10728,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 			if (IS_ERR_OR_NULL(dsi->bridge) && IS_ERR_OR_NULL(dsi->panel)) {
 				dev_info(dev, "Waiting for bridge or panel driver\n");
 				dsi->panel = NULL;
+				panel_lock = true;
 				ret = -EPROBE_DEFER;
 				goto error;
 			}
@@ -10658,6 +10742,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 		}
 	}
 
+	mtk_panel_unlock();
 	if (is_bdg_supported()) {
 		if ((dsi->mode_flags & MIPI_DSI_MODE_VIDEO) == 0) {
 			//bdg_rxtx_ratio = 300;
@@ -10759,6 +10844,8 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	if (mtk_disp_num_from_atag() & BIT(alias) ||
 		(mtk_disp_num_from_atag() == 0 && dsi->ddp_comp.id == DDP_COMPONENT_DSI0)) {
 #ifndef CONFIG_MTK_DISP_NO_LK
+		unsigned int alias = mtk_ddp_comp_get_alias(dsi->ddp_comp.id);
+
 		if (disp_helper_get_stage() == DISP_HELPER_STAGE_NORMAL) {
 			phy_power_on(dsi->phy);
 			ret = clk_prepare_enable(dsi->engine_clk);

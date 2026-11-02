@@ -1734,6 +1734,7 @@ static int seninf_s_stream(struct v4l2_subdev *sd, int enable)
 		dev_info(ctx->dev,
 			"[%s] is_ctx_streaming(%d)\n",
 			__func__, ctx->streaming);
+
 		if (!enable) {
 			// ensure forget cammux setting
 			mtk_cam_seninf_forget_camtg_setting(ctx);
@@ -3078,6 +3079,7 @@ int mtk_cam_seninf_dump(struct v4l2_subdev *sd, u32 seq_id, bool force_check)
 			dev_info(ctx->dev, "%s skip dump, sensor is in resetting\n", __func__);
 	} else
 		dev_info(ctx->dev, "%s should not dump during stream off\n", __func__);
+
 
 	pm_runtime_put_sync(ctx->dev);
 
