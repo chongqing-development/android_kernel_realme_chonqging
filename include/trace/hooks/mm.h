@@ -17,13 +17,14 @@
 #define _TRACE_HOOK_MM_H
 
 #include <trace/hooks/vendor_hooks.h>
+#include <../mm/slab.h>
+
 
 #ifdef __GENKSYMS__
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/rwsem.h>
-#include <../mm/slab.h>
 #endif
 
 struct oom_control;
