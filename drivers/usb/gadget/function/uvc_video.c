@@ -389,9 +389,6 @@ static void uvcg_video_pump(struct work_struct *work)
 	unsigned long flags;
 	bool buf_done;
 	int ret;
-	bool buf_int;
-	/* video->max_payload_size is only set when using bulk transfer */
-	bool is_bulk = video->max_payload_size;
 
 	while (video->ep->enabled) {
 		/*

@@ -1953,7 +1953,6 @@ int serial8250_handle_irq(struct uart_port *port, unsigned int iir)
 #if IS_ENABLED(CONFIG_MTK_IRQ_MONITOR_DEBUG)
 			ts[3] = sched_clock();
 #endif
-			}
 	}
 	serial8250_modem_status(up);
 	if ((!up->dma || up->dma->tx_err) && (status & UART_LSR_THRE) &&

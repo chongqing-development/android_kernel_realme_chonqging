@@ -888,7 +888,7 @@ static void dd_finish_request(struct request *rq)
 	if (!rq->elv.priv[0])
 		return;
 
-	atomic_inc(&per_prio->stats.completed);
+	atomic_inc(&dd->per_prio[prio].stats.completed);
 
 	if (blk_queue_is_zoned(q)) {
 		unsigned long flags;
