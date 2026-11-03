@@ -343,20 +343,6 @@ static struct mml_task *task_get_idle(struct mml_frame_config *cfg)
 	return task;
 }
 
-static void task_move_to_destroy(struct kref *kref)
-{
-	struct mml_task *task = container_of(kref, struct mml_task, ref);
-
-	if (task->config) {
-		struct mml_frame_config *cfg = task->config;
-
-		cfg->cfg_ops->put(cfg);
-		task->config = NULL;
-	}
-
-	mml_core_destroy_task(task);
-}
-
 static void frame_config_destroy(struct mml_frame_config *cfg)
 {
 	struct mml_task *task, *tmp;
@@ -370,7 +356,8 @@ static void frame_config_destroy(struct mml_frame_config *cfg)
 			 * print error but not destroy
 			 */
 			mml_err("[drm]busy task:%p", task);
-			kref_put(&task->ref, task_move_to_destroy);
+			list_del_init(&task->entry);
+			task->config = NULL;
 		}
 	}
 
@@ -381,21 +368,10 @@ static void frame_config_destroy(struct mml_frame_config *cfg)
 			 * print error but not destroy
 			 */
 			mml_err("[drm]busy task:%p", task);
-			kref_put(&task->ref, task_move_to_destroy);
+			list_del_init(&task->entry);
+			task->config = NULL;
 		}
 	}
-
-	list_for_each_entry_safe(task, tmp, &cfg->done_tasks, entry) {
-		list_del_init(&task->entry);
-		kref_put(&task->ref, task_move_to_destroy);
-	}
-
-	cfg->cfg_ops->put(cfg);
-}
-
-static void frame_config_free(struct kref *kref)
-{
-	struct mml_frame_config *cfg = container_of(kref, struct mml_frame_config, ref);
 
 	mml_core_deinit_config(cfg);
 	kfree(cfg);
@@ -411,8 +387,9 @@ static void frame_config_destroy_work(struct work_struct *work)
 	frame_config_destroy(cfg);
 }
 
-static void frame_config_queue_destroy(struct mml_frame_config *cfg)
+static void frame_config_queue_destroy(struct kref *kref)
 {
+	struct mml_frame_config *cfg = container_of(kref, struct mml_frame_config, ref);
 	struct mml_drm_ctx *ctx = cfg->ctx;
 
 	queue_work(ctx->wq_destroy, &cfg->work_destroy);
@@ -585,6 +562,17 @@ static void task_move_to_idle(struct mml_task *task)
 		atomic_read(&ctx->racing_cnt));
 }
 
+static void task_move_to_destroy(struct kref *kref)
+{
+	struct mml_task *task = container_of(kref,
+		struct mml_task, ref);
+
+	if (task->config)
+		kref_put(&task->config->ref, frame_config_queue_destroy);
+
+	mml_core_destroy_task(task);
+}
+
 static void task_submit_done(struct mml_task *task)
 {
 	struct mml_drm_ctx *ctx = task->ctx;
@@ -627,6 +615,16 @@ static void task_buf_put(struct mml_task *task)
 			dma_fence_put(task->buf.seg_map.fence);
 	}
 	mml_trace_ex_end();
+}
+
+static void task_put_idles(struct mml_frame_config *cfg)
+{
+	struct mml_task *task, *task_tmp;
+
+	list_for_each_entry_safe(task, task_tmp, &cfg->done_tasks, entry) {
+		list_del_init(&task->entry);
+		kref_put(&task->ref, task_move_to_destroy);
+	}
 }
 
 static void task_state_dec(struct mml_frame_config *cfg, struct mml_task *task,
@@ -710,7 +708,8 @@ static void task_frame_done(struct mml_task *task)
 		if (!list_empty(&cfg->tasks) || !list_empty(&cfg->await_tasks))
 			continue;
 		list_del_init(&cfg->entry);
-		frame_config_queue_destroy(cfg);
+		task_put_idles(cfg);
+		kref_put(&cfg->ref, frame_config_queue_destroy);
 		ctx->config_cnt--;
 		mml_msg("[drm]config %p send destroy remain %u",
 			cfg, ctx->config_cnt);
@@ -773,8 +772,8 @@ s32 mml_drm_submit(struct mml_drm_ctx *ctx, struct mml_submit *submit,
 	void *cb_param)
 {
 	struct mml_frame_config *cfg;
-	struct mml_task *task = NULL;
-	s32 result = -EINVAL;
+	struct mml_task *task;
+	s32 result;
 	u32 i;
 	struct fence_data fence = {0};
 
@@ -871,7 +870,7 @@ s32 mml_drm_submit(struct mml_drm_ctx *ctx, struct mml_submit *submit,
 			task->config = cfg;
 			task->state = MML_TASK_DUPLICATE;
 			/* add more count for new task create */
-			cfg->cfg_ops->get(cfg);
+			kref_get(&cfg->ref);
 		}
 	} else {
 		cfg = frame_config_create(ctx, submit);
@@ -886,7 +885,6 @@ s32 mml_drm_submit(struct mml_drm_ctx *ctx, struct mml_submit *submit,
 			list_del_init(&cfg->entry);
 			frame_config_destroy(cfg);
 			result = PTR_ERR(task);
-			task = NULL;
 			mml_err("%s create task fail", __func__);
 			goto err_unlock_exit;
 		}
@@ -903,7 +901,7 @@ s32 mml_drm_submit(struct mml_drm_ctx *ctx, struct mml_submit *submit,
 		}
 
 		/* add more count for new task create */
-		cfg->cfg_ops->get(cfg);
+		kref_get(&cfg->ref);
 	}
 
 	/* maintain racing ref count for easy query mode */
@@ -939,7 +937,7 @@ s32 mml_drm_submit(struct mml_drm_ctx *ctx, struct mml_submit *submit,
 			      &submit->buffer.src,
 			      "drm_mml_rdma");
 	if (result) {
-		mml_err("[drm]%s get src dma buf fail", __func__);
+		mml_err("[drm]%s get dma buf fail", __func__);
 		goto err_buf_exit;
 	}
 
@@ -959,7 +957,7 @@ s32 mml_drm_submit(struct mml_drm_ctx *ctx, struct mml_submit *submit,
 				      &submit->buffer.dest[i],
 				      "drm_mml_wrot");
 		if (result) {
-			mml_err("[drm]%s get dest %u dma buf fail", __func__, i);
+			mml_err("[drm]%s get dma buf fail", __func__);
 			goto err_buf_exit;
 		}
 	}
@@ -1002,29 +1000,7 @@ err_unlock_exit:
 	mutex_unlock(&ctx->config_mutex);
 err_buf_exit:
 	mml_trace_end();
-	mml_log("%s fail result %d task %p", __func__, result, task);
-	if (task) {
-		bool is_init_state = task->state == MML_TASK_INITIAL;
-
-		mutex_lock(&ctx->config_mutex);
-		list_del_init(&task->entry);
-		cfg->await_task_cnt--;
-
-		if (is_init_state) {
-			mml_log("dec config %p and del", cfg);
-			list_del_init(&cfg->entry);
-			ctx->config_cnt--;
-			/* revert racing ref count decrease after done */
-			if (cfg->info.mode == MML_MODE_RACING)
-				atomic_dec(&ctx->racing_cnt);
-		} else
-			mml_log("dec config %p", cfg);
-		mutex_unlock(&ctx->config_mutex);
-		kref_put(&task->ref, task_move_to_destroy);
-
-		if (is_init_state)
-			cfg->cfg_ops->put(cfg);
-	}
+	mml_log("%s fail result %d", __func__, result);
 	return result;
 }
 EXPORT_SYMBOL_GPL(mml_drm_submit);
@@ -1237,7 +1213,7 @@ static void config_get(struct mml_frame_config *cfg)
 
 static void config_put(struct mml_frame_config *cfg)
 {
-	kref_put(&cfg->ref, frame_config_free);
+	kref_put(&cfg->ref, frame_config_queue_destroy);
 }
 
 static const struct mml_config_ops drm_config_ops = {
@@ -1340,23 +1316,17 @@ static void drm_ctx_release(struct mml_drm_ctx *ctx)
 {
 	struct mml_frame_config *cfg, *tmp;
 	u32 i, j;
-	struct list_head local_list;
 
 	mml_msg("[drm]%s on ctx %p", __func__, ctx);
 
-	INIT_LIST_HEAD(&local_list);
-
-	/* clone list_head first to aviod circular lock */
 	mutex_lock(&ctx->config_mutex);
-	list_splice_tail_init(&ctx->configs, &local_list);
-	mutex_unlock(&ctx->config_mutex);
-
-	list_for_each_entry_safe_reverse(cfg, tmp, &local_list, entry) {
+	list_for_each_entry_safe_reverse(cfg, tmp, &ctx->configs, entry) {
 		/* check and remove configs/tasks in this context */
 		list_del_init(&cfg->entry);
-		frame_config_queue_destroy(cfg);
+		frame_config_destroy(cfg);
 	}
 
+	mutex_unlock(&ctx->config_mutex);
 	destroy_workqueue(ctx->wq_destroy);
 	destroy_workqueue(ctx->wq_config[0]);
 	destroy_workqueue(ctx->wq_config[1]);

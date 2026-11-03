@@ -518,7 +518,7 @@ androidboot.hardware=mt6985 \
 		compatible = "richtek,rt5512";
 		#sound-dai-cells = <0>;
 		reg = <0x5c>;
-		status = "disable";
+		status = "okay";
 		sound-name-prefix = "Left";
 	};
 

@@ -178,7 +178,6 @@ struct xgf_render {
 	int dep_frames;
 
 	int ema2_enable;
-	int filter_dep_task_enable;
 	struct xgf_ema2_predictor *ema2_pt;
 };
 
@@ -233,7 +232,6 @@ struct xgf_policy_cmd {
 
 	int tgid;
 	int ema2_enable;
-	int filter_dep_task_enable;
 	unsigned long long ts;
 };
 

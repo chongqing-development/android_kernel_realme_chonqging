@@ -109,9 +109,8 @@ int mtk_dprec_logger_pr(unsigned int type, char *fmt, ...);
 
 #define DDPIRQ(fmt, arg...)                                                    \
 	do {                                                                   \
-		mtk_dprec_logger_pr(DPREC_LOGGER_DEBUG, fmt, ##arg);   \
 		if (g_irq_log)                                                 \
-			pr_info("[DISP]" pr_fmt(fmt), ##arg);     \
+			mtk_dprec_logger_pr(DPREC_LOGGER_DEBUG, fmt, ##arg);   \
 	} while (0)
 
 #define DDP_MUTEX_LOCK(lock, name, line)                                       \
@@ -119,7 +118,6 @@ int mtk_dprec_logger_pr(unsigned int type, char *fmt, ...);
 		DDPINFO("M_LOCK:%s[%d] +\n", name, line);		   \
 		DRM_MMP_EVENT_START(mutex_lock, (unsigned long)lock,	   \
 				line);	   \
-		mtk_drm_trace_tag_begin("M_LOCK_%s", name);	\
 		mutex_lock(lock);		   \
 		mutex_time_start = sched_clock();		   \
 		mutex_locker = name;		   \

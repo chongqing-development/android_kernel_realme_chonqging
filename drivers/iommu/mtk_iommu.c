@@ -1812,7 +1812,7 @@ static void mtk_iommu_iotlb_sync(struct iommu_domain *domain,
 		return;
 	}
 
-#if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG) && IS_ENABLED(CONFIG_MTK_IOMMU_DEBUG)
+#if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
 	if (gather->start > 0 && gather->start != ULONG_MAX)
 		mtk_iova_unmap(dom->tab_id, gather->start, length);
 #endif
@@ -1844,7 +1844,7 @@ static void mtk_iommu_sync_map(struct iommu_domain *domain, unsigned long iova,
 		return;
 	}
 
-#if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG) && IS_ENABLED(CONFIG_MTK_IOMMU_DEBUG)
+#if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
 	if (iova > 0 && iova != ULONG_MAX)
 		mtk_iova_map(dom->tab_id, iova, size);
 #endif
@@ -2725,14 +2725,6 @@ out:
 		}
 	}
 
-	if (MTK_IOMMU_HAS_FLAG(data->plat_data, PGTABLE_PA_35_EN)) {
-		ret = dma_set_mask(dev, DMA_BIT_MASK(35));
-		if (ret) {
-			dev_err(dev, "Failed to set dma_mask 35.\n");
-			return ret;
-		}
-	}
-
 	/* mt6873, mt6893, mt6983, mt6879 */
 	if (data->plat_data->iommu_type == APU_IOMMU &&
 	    MTK_IOMMU_HAS_FLAG(data->plat_data, LINK_WITH_APU)) {
@@ -2757,6 +2749,14 @@ out:
 			dev_err(dev, "Unable link %s.\n", apudev->name);
 
 		goto skip_smi;
+	}
+
+	if (MTK_IOMMU_HAS_FLAG(data->plat_data, PGTABLE_PA_35_EN)) {
+		ret = dma_set_mask(dev, DMA_BIT_MASK(35));
+		if (ret) {
+			dev_err(dev, "Failed to set dma_mask 35.\n");
+			return ret;
+		}
 	}
 
 	if (data->plat_data->iommu_type != MM_IOMMU ||

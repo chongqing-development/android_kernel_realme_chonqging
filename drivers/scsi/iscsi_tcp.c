@@ -995,7 +995,6 @@ static void iscsi_sw_tcp_session_destroy(struct iscsi_cls_session *cls_session)
 	iscsi_tcp_r2tpool_free(cls_session->dd_data);
 
 	iscsi_session_free(cls_session);
-
 	iscsi_host_free(shost);
 }
 

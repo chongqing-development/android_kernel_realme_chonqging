@@ -771,12 +771,10 @@ static int mtk_uart_apdma_alloc_chan_resources(struct dma_chan *chan)
 		}
 	}
 
-	if (mtkd->support_hub == 0) {
-		ret = pm_runtime_get_sync(mtkd->ddev.dev);
-		if (ret < 0) {
-			pm_runtime_put_noidle(chan->device->dev);
-			return ret;
-		}
+	ret = pm_runtime_get_sync(mtkd->ddev.dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(chan->device->dev);
+		return ret;
 	}
 
 	if (c->dir == DMA_MEM_TO_DEV) {
@@ -847,11 +845,7 @@ static void mtk_uart_apdma_free_chan_resources(struct dma_chan *chan)
 	if (c->chan_desc_count > 0)
 		pr_info("[WARN] %s, c->chan_desc_count[%d]\n", __func__, c->chan_desc_count);
 	vchan_free_chan_resources(&c->vc);
-
-	if (mtkd->support_hub == 0) {
-		pm_runtime_put_sync(mtkd->ddev.dev);
-	}
-
+	pm_runtime_put_sync(mtkd->ddev.dev);
 }
 
 static enum dma_status mtk_uart_apdma_tx_status(struct dma_chan *chan,

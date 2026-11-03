@@ -28,7 +28,6 @@
 #include "tcpm.h"
 #endif
 
-
 static const unsigned int usb_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,

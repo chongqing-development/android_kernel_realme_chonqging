@@ -168,7 +168,6 @@
 #define IMX596_SENSOR_ID                        0x0596
 #define IMX6632X_SENSOR_ID                      0x0663
 #define IMX581_SENSOR_ID                        0x0581
-#define IMX890_SENSOR_ID                        0x0890
 /*OV*/
 #define OV23850_SENSOR_ID                       0x023850
 #define OV16880_SENSOR_ID                       0x016880

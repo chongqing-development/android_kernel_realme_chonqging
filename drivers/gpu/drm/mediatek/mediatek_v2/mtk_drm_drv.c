@@ -59,7 +59,6 @@
 #include "mtk_disp_chist.h"
 #include "mtk_lease.h"
 #include "mtk_disp_oddmr/mtk_disp_oddmr.h"
-#include "mtk_drm_trace.h"
 #include "platform/mtk_drm_platform.h"
 
 #include "mtk_drm_mmp.h"
@@ -1545,9 +1544,9 @@ static void mtk_set_first_config(struct drm_device *dev,
 			DDPMSG("%s, set first config true\n", __func__);
 		}
 	}
+
 	if (is_bdg_supported())
 		bdg_spi_first_init();
-
 }
 
 static void mtk_atomic_complete(struct mtk_drm_private *private,
@@ -1665,7 +1664,7 @@ static int mtk_atomic_check(struct drm_device *dev,
 }
 
 static void mtk_atomic_check_res_scaling(struct mtk_drm_crtc *mtk_crtc,
-	struct drm_display_mode *mode, int mode_idx)
+	struct drm_display_mode *mode)
 {
 	struct drm_display_mode *pmode = NULL;
 	int i;
@@ -1677,13 +1676,7 @@ static void mtk_atomic_check_res_scaling(struct mtk_drm_crtc *mtk_crtc,
 			(mode->vdisplay != mtk_crtc->scaling_ctx.lcm_height)) {
 		mtk_crtc->scaling_ctx.scaling_en = true;
 		/* adjusted_mode -> scaling_mode */
-		if (mtk_crtc->scaling_ctx.cust_mode_mapping) {
-			mtk_crtc->scaling_ctx.scaling_mode =
-				mtk_drm_crtc_avail_disp_mode(&mtk_crtc->base,
-					mtk_crtc->scaling_ctx.mode_mapping[mode_idx]);
-			DDPMSG("%s mode_idx: %d->%d\n", __func__, mode_idx,
-				mtk_crtc->scaling_ctx.mode_mapping[mode_idx]);
-		} else if (mtk_crtc->avail_modes_num > 0) {
+		if (mtk_crtc->avail_modes_num > 0) {
 			for (i = 0; i < mtk_crtc->avail_modes_num; i++) {
 				pmode = &mtk_crtc->avail_modes[i];
 				if ((pmode->hdisplay == mtk_crtc->scaling_ctx.lcm_width)
@@ -1721,23 +1714,19 @@ static void mtk_atomic_check_res_switch(struct mtk_drm_private *private,
 	struct mtk_ddp_config cfg = {0};
 	struct mtk_ddp_config scaling_cfg = {0};
 	struct mtk_ddp_comp *comp;
-	int mode_idx;
-	struct mtk_crtc_state *new_mtk_state = NULL;
 
 	for_each_old_crtc_in_state(old_state, crtc, old_crtc_state, j) {
 
 		mtk_crtc = to_mtk_crtc(crtc);
 		mode = &crtc->state->adjusted_mode;
 		old_mode = &old_crtc_state->adjusted_mode;
-		new_mtk_state = to_mtk_crtc_state(crtc->state);
-		mode_idx = new_mtk_state->prop_val[CRTC_PROP_DISP_MODE_IDX];
 
 		if ((drm_crtc_index(crtc) == 0)
 			&& (mtk_crtc->res_switch != RES_SWITCH_NO_USE)
 			&& mtk_crtc->mode_chg){
 
 			if (mtk_crtc->res_switch == RES_SWITCH_ON_AP)
-				mtk_atomic_check_res_scaling(mtk_crtc, mode, mode_idx);
+				mtk_atomic_check_res_scaling(mtk_crtc, mode);
 
 			if ((mode->hdisplay == old_mode->hdisplay) &&
 				(mode->vdisplay == old_mode->vdisplay))
@@ -5691,86 +5680,6 @@ int mtk_drm_ioctl_kick_idle(struct drm_device *dev, void *data,
 	return ret;
 }
 
-int mtk_drm_get_mode_ext_info_ioctl(struct drm_device *dev, void *data,
-		struct drm_file *file_priv)
-{
-	struct drm_crtc *crtc;
-	struct mtk_drm_crtc *mtk_crtc;
-	struct mtk_drm_mode_ext_info *args = (struct mtk_drm_mode_ext_info *)data;
-	unsigned int *total_offset = NULL;
-	struct mtk_drm_private *priv = dev->dev_private;
-	unsigned int copy_num;
-	int i = 0;
-
-	DDPINFO("%s\n", __func__);
-
-	crtc = drm_crtc_find(dev, file_priv, args->crtc_id);
-	if (!crtc) {
-		DDPPR_ERR("%s unknown CRTC ID %d\n", __func__, args->crtc_id);
-		return -EINVAL;
-	}
-
-	mtk_crtc = to_mtk_crtc(crtc);
-	if (!mtk_crtc) {
-		DDPPR_ERR("%s mtk_crtc is null\n", __func__);
-		return  -EFAULT;
-	}
-
-	if (drm_crtc_index(crtc) != 0 || !mtk_crtc_is_frame_trigger_mode(crtc))
-		return 0;
-
-	total_offset = kzalloc(sizeof(unsigned int) * mtk_crtc->avail_modes_num,
-			GFP_KERNEL);
-	if (!total_offset) {
-		DDPPR_ERR("%s alloc mem fail\n", __func__);
-		return -EFAULT;
-	}
-
-	for (i = 0;  i < mtk_crtc->avail_modes_num; i++) {
-		unsigned int merge_trigger_offset = 150;
-		unsigned int prefetch_te_offset = 150;
-
-		if (!mtk_drm_helper_get_opt(priv->helper_opt,
-			MTK_DRM_OPT_CHECK_TRIGGER_MERGE))
-			merge_trigger_offset = 0;
-		else if (mtk_crtc->panel_params[i]->merge_trig_offset)
-			merge_trigger_offset = mtk_crtc->panel_params[i]->merge_trig_offset;
-
-		if (!mtk_drm_helper_get_opt(priv->helper_opt,
-			MTK_DRM_OPT_PREFETCH_TE))
-			prefetch_te_offset = 0;
-		else if (mtk_crtc->panel_params[i]->prefetch_offset)
-			prefetch_te_offset = mtk_crtc->panel_params[i]->prefetch_offset;
-
-		total_offset[i] = merge_trigger_offset + prefetch_te_offset;
-	}
-
-	if(args->mode_num > mtk_crtc->avail_modes_num) {
-		copy_num = mtk_crtc->avail_modes_num;
-		DDPPR_ERR("%s mode_num:%d > avail_mode_num:%d\n", __func__,
-			args->mode_num, mtk_crtc->avail_modes_num);
-	} else if (args->mode_num < mtk_crtc->avail_modes_num) {
-		copy_num = args->mode_num;
-		DDPPR_ERR("%s mode_num:%d < avail_mode_num:%d\n", __func__,
-			args->mode_num, mtk_crtc->avail_modes_num);
-	} else
-		copy_num = mtk_crtc->avail_modes_num;
-
-	if (copy_to_user(args->total_offset, total_offset,
-		sizeof(unsigned int) * copy_num)) {
-		DDPPR_ERR("%s copy failed:(0x%p,0x%p), size:%ld\n",
-			__func__, args->total_offset, total_offset,
-			sizeof(unsigned int) * copy_num);
-
-		kfree(total_offset);
-		return -EFAULT;
-	}
-
-	kfree(total_offset);
-
-	return 0;
-}
-
 int mtk_drm_ioctl_get_all_connector_panel_info(struct drm_device *dev, void *data,
 		struct drm_file *file_priv)
 {
@@ -6246,7 +6155,7 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	 */
 	mtk_smi_init_power_off();
 	if (is_bdg_supported())
-		bdg_first_init(drm);
+		bdg_first_init();
 	return 0;
 
 err_unset_dma_parms:
@@ -6487,8 +6396,6 @@ static const struct drm_ioctl_desc mtk_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MTK_SET_GAMMA_MUL_DISABLE, mtk_drm_ioctl_gamma_mul_disable,
 				  DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(MTK_KICK_IDLE, mtk_drm_ioctl_kick_idle,
-				  DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(MTK_GET_MODE_EXT_INFO, mtk_drm_get_mode_ext_info_ioctl,
 				  DRM_UNLOCKED),
 };
 

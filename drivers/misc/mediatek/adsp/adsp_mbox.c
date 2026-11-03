@@ -126,7 +126,8 @@ int adsp_mbox_send(struct mtk_mbox_pin_send *pin_send, void *msg,
 		return MBOX_PIN_BUSY;
 	}
 
-	adsp_enable_clock();
+	if (get_adsp_clock_semaphore() != ADSP_OK)
+		pr_notice("%s() get clock semaphore fail\n", __func__);
 
 	if (mtk_mbox_check_send_irq(mbdev, pin_send->mbox,
 				    pin_send->pin_index)) {
@@ -166,7 +167,7 @@ int adsp_mbox_send(struct mtk_mbox_pin_send *pin_send, void *msg,
 		}
 	}
 EXIT:
-	adsp_disable_clock();
+	release_adsp_clock_semaphore();
 	mutex_unlock(&pin_send->mutex_send);
 	return result;
 }

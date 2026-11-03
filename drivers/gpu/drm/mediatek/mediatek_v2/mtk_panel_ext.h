@@ -375,9 +375,6 @@ struct dynamic_fps_params {
 	unsigned int switch_en;
 	unsigned int vact_timing_fps;
 	unsigned int data_rate;
-	unsigned int apollo_limit_superior_us;
-	unsigned int apollo_limit_inferior_us;
-	unsigned int apollo_transfer_time_us;
 	struct dfps_switch_cmd dfps_cmd_table[MAX_DYN_CMD_NUM];
 };
 
@@ -631,7 +628,6 @@ struct mtk_panel_funcs {
 		struct mtk_panel_params **ext_para,
 		unsigned int mode);
 	enum RES_SWITCH_TYPE (*get_res_switch_type)(void);
-	int (*scaling_mode_mapping)(int mode_idx);
 	int (*mode_switch)(struct drm_panel *panel,
 		struct drm_connector *connector, unsigned int cur_mode,
 		unsigned int dst_mode, enum MTK_PANEL_MODE_SWITCH_STAGE stage);

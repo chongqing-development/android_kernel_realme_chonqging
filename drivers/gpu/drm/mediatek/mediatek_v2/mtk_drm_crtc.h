@@ -655,8 +655,6 @@ struct mtk_scaling_ctx {
 	int lcm_width;
 	int lcm_height;
 	struct drm_display_mode *scaling_mode;
-	bool cust_mode_mapping;
-	int mode_mapping[MAX_MODES];
 };
 
 struct mtk_drm_fake_vsync {
@@ -903,7 +901,6 @@ struct mtk_drm_crtc {
 
 	unsigned int avail_modes_num;
 	struct drm_display_mode *avail_modes;
-	struct mtk_panel_params **panel_params;
 	struct timespec64 vblank_time;
 
 	bool mipi_hopping_sta;
@@ -1205,7 +1202,6 @@ void mtk_crtc_start_sodi_loop(struct drm_crtc *crtc);
 bool mtk_crtc_with_event_loop(struct drm_crtc *crtc);
 void mtk_crtc_stop_event_loop(struct drm_crtc *crtc);
 void mtk_crtc_start_event_loop(struct drm_crtc *crtc);
-bool mtk_crtc_is_event_loop_active(struct mtk_drm_crtc *mtk_crtc);
 
 void mtk_crtc_change_output_mode(struct drm_crtc *crtc, int aod_en);
 int mtk_crtc_user_cmd(struct drm_crtc *crtc, struct mtk_ddp_comp *comp,

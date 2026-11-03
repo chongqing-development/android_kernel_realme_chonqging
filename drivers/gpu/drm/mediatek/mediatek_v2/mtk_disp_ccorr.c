@@ -26,7 +26,6 @@
 #include "mtk_dump.h"
 #include "mtk_drm_helper.h"
 #include "platform/mtk_drm_platform.h"
-#include "mtk_drm_mmp.h"
 
 #ifdef CONFIG_LEDS_MTK_MODULE
 #define CONFIG_LEDS_BRIGHTNESS_CHANGED
@@ -365,8 +364,8 @@ static int disp_ccorr_write_coef_reg(struct mtk_ddp_comp *comp,
 	if (lock)
 		mutex_lock(&g_ccorr_global_lock);
 
-	//DDPINFO("%s:ccorr id:%d,aosp ccorr:%d,nonlinear:%d\n", __func__, id,
-	//	disp_aosp_ccorr, g_disp_ccorr_without_gamma);
+	DDPINFO("%s:ccorr id:%d,aosp ccorr:%d,nonlinear:%d\n", __func__, id,
+		disp_aosp_ccorr, g_disp_ccorr_without_gamma);
 	/* to avoid different show of dual pipe, pipe1 use pipe0's config data */
 	id = conv_to_pipe0_index(id);
 	ccorr = g_disp_ccorr_coef[id];
@@ -1039,32 +1038,6 @@ int disp_ccorr_set_RGB_Gain(struct mtk_ddp_comp *comp,
 	return ret;
 }
 
-static bool is_doze_active(void)
-{
-	struct drm_crtc *crtc;
-	struct mtk_drm_crtc *mtk_crtc;
-	struct mtk_crtc_state *mtk_state;
-
-	if (!default_comp)
-		return false;
-	crtc = &default_comp->mtk_crtc->base;
-	mtk_crtc = to_mtk_crtc(crtc);
-
-	DDP_MUTEX_LOCK(&mtk_crtc->lock, __func__, __LINE__);
-	mtk_state = to_mtk_crtc_state(crtc->state);
-	if(!mtk_state){
-		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-		return false;
-	}
-
-	if (mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE]){
-		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-		return true;
-	}
-	DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-	return false;
-}
-
 int mtk_drm_ioctl_set_ccorr(struct drm_device *dev, void *data,
 		struct drm_file *file_priv)
 {
@@ -1073,18 +1046,6 @@ int mtk_drm_ioctl_set_ccorr(struct drm_device *dev, void *data,
 	struct drm_crtc *crtc = private->crtc[0];
 	struct DRM_DISP_CCORR_COEF_T *ccorr_config = data;
 	int ret;
-
-	if (m_new_pq_persist_property[DISP_PQ_CCORR_SILKY_BRIGHTNESS] &&
-		is_doze_active() &&
-		ccorr_config->silky_bright_flag == 1 &&
-		ccorr_config->FinalBacklight != 0) {
-		DDPINFO("%s, in aod state, brightness = %d",
-				__func__, ccorr_config->FinalBacklight);
-		mtk_leds_brightness_set("lcd-backlight",
-			ccorr_config->FinalBacklight, 0, (0X01<<SET_BACKLIGHT_LEVEL));
-
-		return 0;
-	}
 
 	if (ccorr_config->hw_id != DRM_DISP_CCORR_TOTAL) {
 		DDPINFO("hw_id = %d", ccorr_config->hw_id);
@@ -1421,10 +1382,9 @@ static void mtk_ccorr_config(struct mtk_ddp_comp *comp,
 static void mtk_ccorr_start(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 {
 	DDPINFO("%s\n", __func__);
-	if (set_ccorr0_force_linear != 1) {
-		disp_aosp_ccorr = false;
-		g_disp_ccorr_without_gamma = CCORR_INVERSE_GAMMA;
-	}
+
+	disp_aosp_ccorr = false;
+	g_disp_ccorr_without_gamma = CCORR_INVERSE_GAMMA;
 
 	if (disp_ccorr_number == 2) {
 		if (comp->id == DDP_COMPONENT_CCORR0) {

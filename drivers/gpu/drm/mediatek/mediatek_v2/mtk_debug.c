@@ -2560,7 +2560,6 @@ static void ipanic_lcm_reset(void)
 	comp->funcs->io_cmd(comp, NULL, LCM_RESET, &enable);
 }
 
-
 static void process_dbg_opt(const char *opt)
 {
 	DDPINFO("display_debug cmd %s\n", opt);
@@ -2673,16 +2672,10 @@ static void process_dbg_opt(const char *opt)
 		else if (strncmp(opt + 8, "off", 3) == 0)
 			g_profile_log = 0;
 	} else if (strncmp(opt, "trace:", 6) == 0) {
-		if (strncmp(opt + 6, "on", 2) == 0) {
+		if (strncmp(opt + 6, "on", 2) == 0)
 			g_trace_log = 1;
-			g_trace_log_lv2 = 0;
-		} else if (strncmp(opt + 6, "on2", 3) == 0) {
-			g_trace_log = 1;
-			g_trace_log_lv2 = 1;
-		} else if (strncmp(opt + 6, "off", 3) == 0) {
+		else if (strncmp(opt + 6, "off", 3) == 0)
 			g_trace_log = 0;
-			g_trace_log_lv2 = 0;
-		}
 	} else if (strncmp(opt, "logger:", 7) == 0) {
 		if (strncmp(opt + 7, "on", 2) == 0) {
 			init_log_buffer();
@@ -3329,10 +3322,8 @@ static void process_dbg_opt(const char *opt)
 		}
 
 		DDPMSG("read_ddic_test:%d\n", case_num);
-		if (is_bdg_supported() == false) {
-			ddic_dsi_read_cmd_test(case_num);
-		}
 
+		ddic_dsi_read_cmd_test(case_num);
 	} else if (strncmp(opt, "ddic_page_switch:", 17) == 0) {
 		unsigned int addr, val1, val2, val3;
 		unsigned int val4, val5, val6;

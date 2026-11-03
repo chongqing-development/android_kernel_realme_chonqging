@@ -13,7 +13,6 @@ enum conap_scp_drv_type {
 	DRV_TYPE_EM			= 3,
 	DRV_TYPE_FLP		= 4,
 	DRV_TYPE_GEOFENCE	= 5,
-	DRV_TYPE_EXTRA      = 6,
 	CONAP_SCP_DRV_NUM
 };
 

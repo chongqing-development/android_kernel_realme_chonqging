@@ -144,4 +144,3 @@
 
 # preserved by --additions-only
   android_kmalloc_64_create
-  __sysfs_match_string

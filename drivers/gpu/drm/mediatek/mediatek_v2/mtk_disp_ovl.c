@@ -956,9 +956,6 @@ static irqreturn_t mtk_disp_ovl_irq_handler(int irq, void *dev_id)
 		DDPIRQ("[IRQ] %s: frame done!\n", mtk_dump_comp_str(ovl));
 
 		dump_ovl_layer_trace(mtk_crtc, ovl);
-
-		if ((ovl->id == DDP_COMPONENT_OVL0_2L) && mtk_crtc_is_frame_trigger_mode(&mtk_crtc->base))
-		   atomic_set(&mtk_crtc->esd_ctx->target_time, 0);
 	}
 	if ((ovl->id == DDP_COMPONENT_OVL0_2L) && (val & (1 << 15))) {
 		DDPIRQ("[IRQ] %s: OVL target line\n", mtk_dump_comp_str(ovl));
@@ -1784,7 +1781,7 @@ static int mtk_ovl_color_manage(struct mtk_ddp_comp *comp, unsigned int idx,
 	u32 wcg_mask = 0, wcg_value = 0, sel_mask = 0, sel_value = 0, reg = 0;
 	enum mtk_drm_color_mode lcm_cm;
 	enum mtk_drm_dataspace lcm_ds = 0, plane_ds = 0;
-	struct mtk_panel_params *params = NULL;
+	struct mtk_panel_params *params;
 	int i;
 	int ovl_csc_en_cur = 0;
 	unsigned int ocfbn = 0;

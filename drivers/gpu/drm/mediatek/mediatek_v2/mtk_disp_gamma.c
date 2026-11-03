@@ -486,7 +486,7 @@ static int mtk_gamma_12bit_set_lut(struct mtk_ddp_comp *comp,
 				struct drm_crtc *crtc = &mtk_crtc->base;
 				struct mtk_drm_private *priv = crtc->dev->dev_private;
 				struct mtk_ddp_comp *comp_gamma1 =
-					priv->ddp_comp[DDP_COMPONENT_GAMMA1];
+							priv->ddp_comp[DDP_COMPONENT_GAMMA1];
 
 				ret = mtk_gamma_write_12bit_lut_reg(comp_gamma1, handle, 0);
 			}

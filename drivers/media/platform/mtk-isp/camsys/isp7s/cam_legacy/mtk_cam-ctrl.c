@@ -7109,7 +7109,6 @@ static void mtk_cam_extisp_vf_reset_correct(struct mtk_cam_ctx *ctx,
 	fbc_cnt = ((fbc_fho_ctl & CNT_BIT_MASK) >> 16) - 1;
 
 	raw_dev->vf_reset_cnt = fbc_cnt >= 0 ? fbc_cnt : 0;
-
 	dev_info(raw_dev->dev, "[%s] vf_reset_cnt:%d, fho_fbc_ctrl2:0x%x",
 		__func__, raw_dev->vf_reset_cnt, fbc_fho_ctl);
 }

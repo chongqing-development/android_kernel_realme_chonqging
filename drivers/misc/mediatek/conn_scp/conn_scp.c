@@ -27,7 +27,6 @@
 #endif
 #include "aol_flp.h"
 #include "aol_geofence.h"
-#include "aolextra_core.h"
 
 #define CONN_SCP_DEVNAME            "connscp"
 
@@ -97,7 +96,7 @@ int conn_scp_init(void)
 #endif
 	aol_flp_init();
 	aol_geofence_init();
-	aolextra_core_init();
+
 	return 0;
 
 err_out:
@@ -120,7 +119,7 @@ void conn_scp_exit(void)
 
 	aol_flp_deinit();
 	aol_geofence_deinit();
-	aolextra_core_deinit();
+
 #ifdef AOLTEST_SUPPORT
 	aoltest_core_deinit();
 #endif
