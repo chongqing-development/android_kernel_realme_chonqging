@@ -1712,6 +1712,7 @@ int mtk_drm_setbacklight(struct drm_crtc *crtc, unsigned int level,
 			} else
 				comp->funcs->io_cmd(comp, cmdq_handle, DSI_SET_BL, &level);
 		}
+#endif
 	} else {
 
 		/* set backlight and elvss*/
@@ -12155,7 +12156,7 @@ rte_target:
 				mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
 		}
 
-		mtk_drm_trace_end();
+		mtk_drm_trace_end("msync_level_fps");
 
 	/* If need Multi TE, to do it here */
 	} else if (params->msync_cmd_table.te_type == MULTI_TE) {
@@ -12293,7 +12294,7 @@ mte_target:
 				mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
 		}
 
-		mtk_drm_trace_end();
+		mtk_drm_trace_end("msync_level_fps");
 
 	} else if (params->msync_cmd_table.te_type == TRIGGER_LEVEL_TE) {
 		/* TODO: Add Trigger Level Te */

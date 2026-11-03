@@ -1649,6 +1649,33 @@ static void mtk_dsi_ps_control_vact(struct mtk_dsi *dsi)
 	}
 }
 
+static void mtk_dsi_lane_num(struct mtk_dsi *dsi)
+{
+	u32 tmp_reg;
+
+	switch (dsi->lanes) {
+	case 1:
+		tmp_reg = 0x1 << 2;
+		break;
+	case 2:
+		tmp_reg = 0x3 << 2;
+		break;
+	case 3:
+		tmp_reg = 0x7 << 2;
+		break;
+	case 4:
+		tmp_reg = 0xf << 2;
+		break;
+	default:
+		tmp_reg = 0xf << 2;
+		break;
+	}
+
+	tmp_reg = tmp_reg | 0x00010200;
+	DDPMSG("%s write Txrx value = 0x%x\n", __func__, tmp_reg);
+	writel(tmp_reg, dsi->regs + DSI_TXRX_CTRL);
+}
+
 static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 {
 	u32 tmp_reg;
@@ -11456,6 +11483,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	struct resource *regs;
 	int irq_num;
 	int comp_id;
+	bool panel_lock = false;
 	int ret;
 	unsigned int alias;
 
@@ -11471,14 +11499,17 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	dsi->is_slave = of_property_read_bool(dev->of_node,
 					      "mediatek,dual-dsi-slave");
 
+	mtk_panel_lock();
 	ret = mipi_dsi_host_register(&dsi->host);
 	if (ret < 0) {
 		dev_err(dev, "failed to register DSI host: %d\n", ret);
+		mtk_panel_unlock();
 		return -EPROBE_DEFER;
 	}
 	of_id = of_match_device(mtk_dsi_of_match, &pdev->dev);
 	if (!of_id) {
 		dev_err(dev, "DSI device match failed\n");
+		mtk_panel_unlock();
 		return -EPROBE_DEFER;
 	}
 
@@ -11490,6 +11521,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 			remote_node = of_graph_get_remote_port_parent(endpoint);
 			if (!remote_node) {
 				dev_err(dev, "No panel connected\n");
+				panel_lock = true;
 				ret = -ENODEV;
 				goto error;
 			}
@@ -11500,6 +11532,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 			if (IS_ERR_OR_NULL(dsi->bridge) && IS_ERR_OR_NULL(dsi->panel)) {
 				dev_info(dev, "Waiting for bridge or panel driver\n");
 				dsi->panel = NULL;
+				panel_lock = true;
 				ret = -EPROBE_DEFER;
 				goto error;
 			}
@@ -11513,6 +11546,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 		}
 	}
 
+	mtk_panel_unlock();
 	if (is_bdg_supported()) {
 		if ((dsi->mode_flags & MIPI_DSI_MODE_VIDEO) == 0) {
 			//bdg_rxtx_ratio = 300;
