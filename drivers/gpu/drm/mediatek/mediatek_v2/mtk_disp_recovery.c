@@ -739,6 +739,7 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 		} else if (recovery_flg && ret == 0) {
 			DDPPR_ERR("[ESD%u] esd recovery success\n", crtc_idx);
 			recovery_flg = 0;
+			esd_recovery_flg = 1;
 		}
 		mtk_drm_trace_end("esd");
 
@@ -746,6 +747,15 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
 			mutex_unlock(&private->commit.lock);
 		}
+
+		/* esd check GPIO_TE, after esd recovery, set backlight */
+		if (is_bdg_supported()) {
+			if (esd_recovery_flg) {
+				esd_recovery_flg = 0;
+				mtkfb_set_backlight_level(backlight_level_esd, 0, 0x1);
+			}
+		}
+
 		return 0;
 
 }

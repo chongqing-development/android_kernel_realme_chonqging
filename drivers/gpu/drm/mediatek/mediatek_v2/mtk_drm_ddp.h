@@ -125,6 +125,8 @@ struct mtk_mmsys_reg_data {
 	unsigned int *path_sel;
 	unsigned int path_sel_size;
 	const unsigned int *dispsys_map;
+	const unsigned int *module_rst_offset;
+	const unsigned int *module_rst_bit;
 };
 
 #define MT6983_DUMMY_REG_CNT 85
