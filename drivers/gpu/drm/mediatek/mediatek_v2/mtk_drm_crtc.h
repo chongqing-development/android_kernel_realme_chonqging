@@ -1202,6 +1202,7 @@ void mtk_crtc_start_sodi_loop(struct drm_crtc *crtc);
 bool mtk_crtc_with_event_loop(struct drm_crtc *crtc);
 void mtk_crtc_stop_event_loop(struct drm_crtc *crtc);
 void mtk_crtc_start_event_loop(struct drm_crtc *crtc);
+bool mtk_crtc_is_event_loop_active(struct mtk_drm_crtc *mtk_crtc);
 
 void mtk_crtc_change_output_mode(struct drm_crtc *crtc, int aod_en);
 int mtk_crtc_user_cmd(struct drm_crtc *crtc, struct mtk_ddp_comp *comp,

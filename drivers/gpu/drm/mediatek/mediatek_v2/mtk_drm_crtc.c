@@ -5770,6 +5770,17 @@ bool mtk_crtc_is_frame_trigger_mode(struct drm_crtc *crtc)
 	return true;
 }
 
+bool mtk_crtc_is_event_loop_active(struct mtk_drm_crtc *mtk_crtc)
+{
+	if (mtk_crtc->pre_te_cfg.prefetch_te_en ||
+		mtk_crtc->pre_te_cfg.merge_trigger_en ||
+		mtk_crtc->pre_te_cfg.vidle_apsrc_off_en ||
+		mtk_crtc->pre_te_cfg.vidle_dsi_pll_off_en)
+		return true;
+
+	return false;
+}
+
 static bool mtk_crtc_target_is_dc_mode(struct drm_crtc *crtc,
 				unsigned int ddp_mode)
 {
