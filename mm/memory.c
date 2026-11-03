@@ -109,6 +109,14 @@ EXPORT_SYMBOL(mem_map);
 void *high_memory;
 EXPORT_SYMBOL(high_memory);
 
+#define SZ_1G_PAGES (SZ_1G >> PAGE_SHIFT)
+
+#define TOTALRAM_2GB (2*SZ_1G_PAGES)
+#define TOTALRAM_3GB (3*SZ_1G_PAGES)
+#define TOTALRAM_4GB (4*SZ_1G_PAGES)
+#define TOTALRAM_6GB (6*SZ_1G_PAGES)
+#define TOTALRAM_8GB (8*SZ_1G_PAGES)
+
 /*
  * Randomize the address space (stacks, mmaps, brk, etc.).
  *
@@ -4410,12 +4418,18 @@ late_initcall(fault_around_debugfs);
 static vm_fault_t do_fault_around(struct vm_fault *vmf)
 {
 	unsigned long address = vmf->address, nr_pages, mask;
+	unsigned long fault_around_bytes_tmp = READ_ONCE(fault_around_bytes);
 	pgoff_t start_pgoff = vmf->pgoff;
 	pgoff_t end_pgoff;
 	int off;
 	vm_fault_t ret;
 
-	nr_pages = READ_ONCE(fault_around_bytes) >> PAGE_SHIFT;
+	if ((totalram_pages() <= TOTALRAM_4GB) && (totalram_pages() > TOTALRAM_3GB) && fault_around_bytes_tmp != 4096) {
+		fault_around_bytes = rounddown_pow_of_two(4096);
+		fault_around_bytes_tmp = READ_ONCE(fault_around_bytes);
+	}
+
+	nr_pages = READ_ONCE(fault_around_bytes_tmp) >> PAGE_SHIFT;
 	mask = ~(nr_pages * PAGE_SIZE - 1) & PAGE_MASK;
 
 	address = max(address & mask, vmf->vma->vm_start);
