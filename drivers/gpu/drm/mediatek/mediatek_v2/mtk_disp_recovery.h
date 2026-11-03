@@ -30,6 +30,7 @@ struct mtk_drm_esd_ctx {
 };
 int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock);
 
+void mtk_disp_esd_attach_crtc(struct drm_crtc *crtc, struct mtk_ddp_comp *output_comp);
 void mtk_disp_esd_check_switch(struct drm_crtc *crtc, bool enable);
 void mtk_disp_chk_recover_init(struct drm_crtc *crtc);
 long disp_dts_gpio_init(struct device *dev, struct mtk_drm_private *private);

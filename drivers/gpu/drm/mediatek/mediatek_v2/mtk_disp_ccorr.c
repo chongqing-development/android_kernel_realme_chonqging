@@ -58,6 +58,18 @@
 #define CCORR_CLIP(val, min, max) ((val >= max) ? \
 	max : ((val <= min) ? min : val))
 
+
+#ifdef OPLUS_FEATURE_DISPLAY
+extern unsigned int oplus_display_brightness;
+
+static int set_ccorr0_force_linear = 0;
+static unsigned int ccorr_offset_temp[3] = {0, 0, 0};
+#endif /* OPLUS_FEATURE_DISPLAY  */
+
+#ifdef OPLUS_FEATURE_DISPLAY
+extern bool g_ccorr_probe_ready;
+#endif
+
 static unsigned int g_ccorr_8bit_switch[DISP_CCORR_TOTAL];
 static unsigned int g_ccorr_relay_value[DISP_CCORR_TOTAL];
 
@@ -386,9 +398,27 @@ static int disp_ccorr_write_coef_reg(struct mtk_ddp_comp *comp,
 		}
 		ccorr = multiply_matrix;
 
-		ccorr->offset[0] = g_disp_ccorr_coef[id]->offset[0];
-		ccorr->offset[1] = g_disp_ccorr_coef[id]->offset[1];
-		ccorr->offset[2] = g_disp_ccorr_coef[id]->offset[2];
+		#ifdef OPLUS_FEATURE_DISPLAY
+		if (set_ccorr0_force_linear == 1) {
+			if (((g_prim_ccorr_force_linear && (disp_ccorr_linear&0x01)) ||
+				(g_prim_ccorr_pq_nonlinear && (disp_ccorr_linear == 0x0))) &&
+				(disp_ccorr_number == 1) && (g_disp_ccorr_temp_linear == 1)) {
+				g_disp_ccorr_without_gamma = g_disp_ccorr_temp_linear;
+				ccorr->offset[0] = ccorr_offset_temp[0];
+				ccorr->offset[1] = ccorr_offset_temp[1];
+				ccorr->offset[2] = ccorr_offset_temp[2];
+			}
+		} else {
+			ccorr->offset[0] = g_disp_ccorr_coef[id]->offset[0];
+			ccorr->offset[1] = g_disp_ccorr_coef[id]->offset[1];
+			ccorr->offset[2] = g_disp_ccorr_coef[id]->offset[2];
+		}
+
+		DDPINFO("%s:ccorr id:%d,aosp ccorr:%d,nonlinear:%d\n", __func__, id,
+			disp_aosp_ccorr, g_disp_ccorr_without_gamma);
+		DDPDBG("ccorr color matrix offset {%d, %d, %d}\n",
+			ccorr->offset[0], ccorr->offset[1], ccorr->offset[2]);
+		#endif
 	//}
 
 	// For 6885 need to left shift one bit
@@ -664,8 +694,12 @@ void disp_pq_notify_backlight_changed(int bl_1024)
 	DDPINFO("%s: %d\n", __func__, bl_1024);
 
 	if (m_new_pq_persist_property[DISP_PQ_CCORR_SILKY_BRIGHTNESS]) {
-		if (default_comp != NULL &&
-			g_ccorr_relay_value[index_of_ccorr(default_comp->id)] != 1) {
+		if (default_comp != NULL
+			#ifdef OPLUS_FEATURE_DISPLAY_APOLLO
+			/* to keep value of backlight for FOD while screen is turning on */
+			/* &&g_ccorr_relay_value[index_of_ccorr(default_comp->id)] != 1 */
+			#endif /* OPLUS_FEATURE_DISPLAY_APOLLO */
+			) {
 			atomic_set(&g_irq_backlight_change, 1);
 			disp_ccorr_set_interrupt(default_comp, 1);
 
@@ -914,6 +948,12 @@ int disp_ccorr_set_color_matrix(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 	g_disp_ccorr_coef[id]->offset[1] = (matrix[13] << 1) << ccorr_offset_mask;
 	g_disp_ccorr_coef[id]->offset[2] = (matrix[14] << 1) << ccorr_offset_mask;
 
+	#ifdef OPLUS_FEATURE_DISPLAY
+	ccorr_offset_temp[0] = (matrix[12] << 1) << ccorr_offset_mask;
+	ccorr_offset_temp[1] = (matrix[13] << 1) << ccorr_offset_mask;
+	ccorr_offset_temp[2] = (matrix[14] << 1) << ccorr_offset_mask;
+	#endif
+
 	//if only ccorr0 hw exist and aosp forece linear or
 	//pq force nonlinear,id should be 0, g_disp_ccorr_coef
 	//should be PQ ioctl data, so no need to set value here
@@ -1032,6 +1072,9 @@ int mtk_drm_ioctl_set_ccorr(struct drm_device *dev, void *data,
 			DDPINFO("brightness = %d, silky_bright_flag = %d",
 				ccorr_config->FinalBacklight,
 				ccorr_config->silky_bright_flag);
+#ifdef OPLUS_FEATURE_DISPLAY
+			oplus_display_brightness = ccorr_config->FinalBacklight;
+#endif /* OPLUS_FEATURE_DISPLAY  */
 			mtk_leds_brightness_set("lcd-backlight",
 				ccorr_config->FinalBacklight, 0, (0X01<<SET_BACKLIGHT_LEVEL));
 		}
@@ -1657,9 +1700,15 @@ static void mtk_get_ccorr_property(struct device_node *node)
 	if (ret)
 		DDPPR_ERR("read ccorr_prim_force_linear failed\n");
 
-	DDPINFO("%s:ccorr_bit:%d,ccorr_number:%d,ccorr_linear:%d,ccorr0 force linear:%d\n",
+	#ifdef OPLUS_FEATURE_DISPLAY
+	ret = of_property_read_u32(node, "set_ccorr_force_linear", &set_ccorr0_force_linear);
+	if (ret)
+		DDPPR_ERR("read set_ccorr_force_linear failed\n");
+	#endif
+
+	DDPINFO("%s:ccorr_bit:%d,ccorr_number:%d,ccorr_linear:%d,ccorr0 force linear:%d,set_ccorr0_force_linear:%d\n",
 		__func__, disp_ccorr_caps.ccorr_bit, disp_ccorr_caps.ccorr_number,
-		disp_ccorr_caps.ccorr_linear, ccorr0_force_linear);
+		disp_ccorr_caps.ccorr_linear, ccorr0_force_linear, set_ccorr0_force_linear);
 
 	disp_ccorr_number = disp_ccorr_caps.ccorr_number;
 	disp_ccorr_linear = disp_ccorr_caps.ccorr_linear;
@@ -1741,6 +1790,9 @@ static int mtk_disp_ccorr_probe(struct platform_device *pdev)
 #ifdef CONFIG_LEDS_BRIGHTNESS_CHANGED
 	if (comp_id == DDP_COMPONENT_CCORR0)
 		mtk_leds_register_notifier(&leds_init_notifier);
+#endif
+#ifdef OPLUS_FEATURE_DISPLAY
+	g_ccorr_probe_ready = true;
 #endif
 	DDPINFO("%s-\n", __func__);
 

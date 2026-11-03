@@ -5347,8 +5347,10 @@ void output_debug_signal(void)
 
 }
 
-void bdg_first_init(void)
+void bdg_first_init(struct drm_device *drm)
 {
+	(void)drm;
+
 	DISPSYS_REG = (struct BDG_DISPSYS_CONFIG_REGS *)DISPSYS_BDG_MMSYS_CONFIG_BASE;
 	DSI2_REG = (struct BDG_MIPIDSI2_REGS *)DISPSYS_BDG_MIPIDSI2_DEVICE_BASE;
 	SYS_REG = (struct BDG_SYSREG_CTRL_REGS *)DISPSYS_BDG_SYSREG_CTRL_BASE;

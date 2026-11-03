@@ -130,7 +130,7 @@ int bdg_tx_data_phy_cycle_calc(struct mtk_dsi *dsi,
 				unsigned int *bdg_tx_data_phy_cycle);
 
 //irqreturn_t bdg_eint_irq_handler(int irq, void *data);
-void bdg_first_init(void);
+void bdg_first_init(struct drm_device *drm);
 irqreturn_t bdg_eint_thread_handler(int irq, void *data);
 void bdg_request_eint_irq(void);
 //void bdg_free_eint_irq(void);
