@@ -19,7 +19,7 @@
 #define DISP_C3D_SRAM_SIZE_17BIN (17 * 17 * 17)
 #define DISP_C3D_SRAM_SIZE_9BIN (9 * 9 * 9)
 
-static bool gPktReused;
+static bool gPktReused[HW_ENGINE_NUM];
 static struct cmdq_reuse reuse_c3d0[4913 * 2], reuse_c3d1[4913 * 2];
 
 #ifdef OPLUS_FEATURE_DISPLAY
