@@ -51,7 +51,7 @@ enum {
 static struct percpu_counter mptcp_sockets_allocated;
 
 static void __mptcp_destroy_sock(struct sock *sk);
-static void mptcp_check_send_data_fin(struct sock *sk);
+static void __mptcp_check_send_data_fin(struct sock *sk);
 
 DEFINE_PER_CPU(struct mptcp_delegated_action, mptcp_delegated_actions);
 static struct net_device mptcp_napi_dev;
@@ -355,7 +355,8 @@ static bool mptcp_pending_data_fin_ack(struct sock *sk)
 {
 	struct mptcp_sock *msk = mptcp_sk(sk);
 
-	return ((1 << sk->sk_state) &
+	return !__mptcp_check_fallback(msk) &&
+	       ((1 << sk->sk_state) &
 		(TCPF_FIN_WAIT1 | TCPF_CLOSING | TCPF_LAST_ACK)) &&
 	       msk->write_seq == READ_ONCE(msk->snd_una);
 }
@@ -508,6 +509,9 @@ static bool mptcp_check_data_fin(struct sock *sk)
 	u64 rcv_data_fin_seq;
 	bool ret = false;
 
+	if (__mptcp_check_fallback(msk))
+		return ret;
+
 	/* Need to ack a DATA_FIN received from a peer while this side
 	 * of the connection is in ESTABLISHED, FIN_WAIT1, or FIN_WAIT2.
 	 * msk->rcv_data_fin was set when parsing the incoming options
@@ -545,8 +549,7 @@ static bool mptcp_check_data_fin(struct sock *sk)
 		}
 
 		ret = true;
-		if (!__mptcp_check_fallback(msk))
-			mptcp_send_ack(msk);
+		mptcp_send_ack(msk);
 		mptcp_close_wake_up(sk);
 	}
 	return ret;
@@ -1609,7 +1612,7 @@ out:
 	if (!mptcp_timer_pending(sk))
 		mptcp_reset_timer(sk);
 	if (copied)
-		mptcp_check_send_data_fin(sk);
+		__mptcp_check_send_data_fin(sk);
 }
 
 static void __mptcp_subflow_push_pending(struct sock *sk, struct sock *ssk)
@@ -2445,9 +2448,10 @@ static void mptcp_worker(struct work_struct *work)
 
 	lock_sock(sk);
 	state = sk->sk_state;
-	if (unlikely((1 << state) & (TCPF_CLOSE | TCPF_LISTEN)))
+	if (unlikely(state == TCP_CLOSE))
 		goto unlock;
 
+	mptcp_check_data_fin_ack(sk);
 	mptcp_flush_join_list(msk);
 
 	mptcp_check_fastclose(msk);
@@ -2458,8 +2462,7 @@ static void mptcp_worker(struct work_struct *work)
 	if (test_and_clear_bit(MPTCP_WORK_EOF, &msk->flags))
 		mptcp_check_for_eof(msk);
 
-	mptcp_check_send_data_fin(sk);
-	mptcp_check_data_fin_ack(sk);
+	__mptcp_check_send_data_fin(sk);
 	mptcp_check_data_fin(sk);
 
 	/* There is no point in keeping around an orphaned sk timedout or
@@ -2588,12 +2591,6 @@ void mptcp_subflow_shutdown(struct sock *sk, struct sock *ssk, int how)
 			pr_debug("Fallback");
 			ssk->sk_shutdown |= how;
 			tcp_shutdown(ssk, how);
-
-			/* simulate the data_fin ack reception to let the state
-			 * machine move forward
-			 */
-			WRITE_ONCE(mptcp_sk(sk)->snd_una, mptcp_sk(sk)->snd_nxt);
-			mptcp_schedule_work(sk);
 		} else {
 			pr_debug("Sending DATA_FIN on subflow %p", ssk);
 			tcp_send_ack(ssk);
@@ -2633,7 +2630,7 @@ static int mptcp_close_state(struct sock *sk)
 	return next & TCP_ACTION_FIN;
 }
 
-static void mptcp_check_send_data_fin(struct sock *sk)
+static void __mptcp_check_send_data_fin(struct sock *sk)
 {
 	struct mptcp_subflow_context *subflow;
 	struct mptcp_sock *msk = mptcp_sk(sk);
@@ -2650,6 +2647,18 @@ static void mptcp_check_send_data_fin(struct sock *sk)
 		return;
 
 	WRITE_ONCE(msk->snd_nxt, msk->write_seq);
+
+	/* fallback socket will not get data_fin/ack, can move to the next
+	 * state now
+	 */
+	if (__mptcp_check_fallback(msk)) {
+		if ((1 << sk->sk_state) & (TCPF_CLOSING | TCPF_LAST_ACK)) {
+			inet_sk_state_store(sk, TCP_CLOSE);
+			mptcp_close_wake_up(sk);
+		} else if (sk->sk_state == TCP_FIN_WAIT1) {
+			inet_sk_state_store(sk, TCP_FIN_WAIT2);
+		}
+	}
 
 	mptcp_flush_join_list(msk);
 	mptcp_for_each_subflow(msk, subflow) {
@@ -2671,7 +2680,7 @@ static void __mptcp_wr_shutdown(struct sock *sk)
 	WRITE_ONCE(msk->write_seq, msk->write_seq + 1);
 	WRITE_ONCE(msk->snd_data_fin_enable, 1);
 
-	mptcp_check_send_data_fin(sk);
+	__mptcp_check_send_data_fin(sk);
 }
 
 static void __mptcp_destroy_sock(struct sock *sk)
@@ -3612,6 +3621,12 @@ static const struct proto_ops mptcp_v6_stream_ops = {
 
 static struct proto mptcp_v6_prot;
 
+static void mptcp_v6_destroy(struct sock *sk)
+{
+	mptcp_destroy(sk);
+	inet6_destroy_sock(sk);
+}
+
 static struct inet_protosw mptcp_v6_protosw = {
 	.type		= SOCK_STREAM,
 	.protocol	= IPPROTO_MPTCP,
@@ -3627,6 +3642,7 @@ int __init mptcp_proto_v6_init(void)
 	mptcp_v6_prot = mptcp_prot;
 	strcpy(mptcp_v6_prot.name, "MPTCPv6");
 	mptcp_v6_prot.slab = NULL;
+	mptcp_v6_prot.destroy = mptcp_v6_destroy;
 	mptcp_v6_prot.obj_size = sizeof(struct mptcp6_sock);
 
 	err = proto_register(&mptcp_v6_prot, 1);

@@ -852,8 +852,8 @@ out:
 }
 
 static int __f2fs_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
-			  struct dentry *dentry, umode_t mode, bool is_whiteout,
-			  struct inode **new_inode)
+					struct dentry *dentry, umode_t mode,
+					struct inode **whiteout)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
 	struct inode *inode;
@@ -867,7 +867,7 @@ static int __f2fs_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 
-	if (is_whiteout) {
+	if (whiteout) {
 		init_special_inode(inode, inode->i_mode, WHITEOUT_DEV);
 		inode->i_op = &f2fs_special_inode_operations;
 	} else {
@@ -892,24 +892,20 @@ static int __f2fs_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
 	f2fs_add_orphan_inode(inode);
 	f2fs_alloc_nid_done(sbi, inode->i_ino);
 
-	if (is_whiteout) {
+	if (whiteout) {
 		f2fs_i_links_write(inode, false);
 
 		spin_lock(&inode->i_lock);
 		inode->i_state |= I_LINKABLE;
 		spin_unlock(&inode->i_lock);
+
+		*whiteout = inode;
 	} else {
-		if (dentry)
-			d_tmpfile(dentry, inode);
-		else
-			f2fs_i_links_write(inode, false);
+		d_tmpfile(dentry, inode);
 	}
 	/* link_count was changed by d_tmpfile as well. */
 	f2fs_unlock_op(sbi);
 	unlock_new_inode(inode);
-
-	if (new_inode)
-		*new_inode = inode;
 
 	f2fs_balance_fs(sbi, true);
 	return 0;
@@ -931,7 +927,7 @@ static int f2fs_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
 	if (!f2fs_is_checkpoint_ready(sbi))
 		return -ENOSPC;
 
-	return __f2fs_tmpfile(mnt_userns, dir, dentry, mode, false, NULL);
+	return __f2fs_tmpfile(mnt_userns, dir, dentry, mode, NULL);
 }
 
 static int f2fs_create_whiteout(struct user_namespace *mnt_userns,
@@ -941,13 +937,7 @@ static int f2fs_create_whiteout(struct user_namespace *mnt_userns,
 		return -EIO;
 
 	return __f2fs_tmpfile(mnt_userns, dir, NULL,
-				S_IFCHR | WHITEOUT_MODE, true, whiteout);
-}
-
-int f2fs_get_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
-		     struct inode **new_inode)
-{
-	return __f2fs_tmpfile(mnt_userns, dir, NULL, S_IFREG, false, new_inode);
+				S_IFCHR | WHITEOUT_MODE, whiteout);
 }
 
 static int f2fs_rename(struct user_namespace *mnt_userns, struct inode *old_dir,

@@ -674,7 +674,7 @@ static struct stats dx_show_leaf(struct inode *dir,
 				len = de->name_len;
 				if (!IS_ENCRYPTED(dir)) {
 					/* Directory is not encrypted */
-					(void) ext4fs_dirhash(dir, de->name,
+					ext4fs_dirhash(dir, de->name,
 						de->name_len, &h);
 					printk("%*.s:(U)%x.%u ", len,
 					       name, h.hash,
@@ -709,9 +709,8 @@ static struct stats dx_show_leaf(struct inode *dir,
 					if (IS_CASEFOLDED(dir))
 						h.hash = EXT4_DIRENT_HASH(de);
 					else
-						(void) ext4fs_dirhash(dir,
-							de->name,
-							de->name_len, &h);
+						ext4fs_dirhash(dir, de->name,
+						       de->name_len, &h);
 					printk("%*.s:(E)%x.%u ", len, name,
 					       h.hash, (unsigned) ((char *) de
 								   - base));
@@ -721,8 +720,7 @@ static struct stats dx_show_leaf(struct inode *dir,
 #else
 				int len = de->name_len;
 				char *name = de->name;
-				(void) ext4fs_dirhash(dir, de->name,
-						      de->name_len, &h);
+				ext4fs_dirhash(dir, de->name, de->name_len, &h);
 				printk("%*.s:%x.%u ", len, name, h.hash,
 				       (unsigned) ((char *) de - base));
 #endif
@@ -851,14 +849,8 @@ dx_probe(struct ext4_filename *fname, struct inode *dir,
 	hinfo->seed = EXT4_SB(dir->i_sb)->s_hash_seed;
 	/* hash is already computed for encrypted casefolded directory */
 	if (fname && fname_name(fname) &&
-	    !(IS_ENCRYPTED(dir) && IS_CASEFOLDED(dir))) {
-		int ret = ext4fs_dirhash(dir, fname_name(fname),
-					 fname_len(fname), hinfo);
-		if (ret < 0) {
-			ret_err = ERR_PTR(ret);
-			goto fail;
-		}
-	}
+				!(IS_ENCRYPTED(dir) && IS_CASEFOLDED(dir)))
+		ext4fs_dirhash(dir, fname_name(fname), fname_len(fname), hinfo);
 	hash = hinfo->hash;
 
 	if (root->info.unused_flags & 1) {
@@ -1119,12 +1111,7 @@ static int htree_dirblock_to_tree(struct file *dir_file,
 				hinfo->minor_hash = 0;
 			}
 		} else {
-			err = ext4fs_dirhash(dir, de->name,
-					     de->name_len, hinfo);
-			if (err < 0) {
-				count = err;
-				goto errout;
-			}
+			ext4fs_dirhash(dir, de->name, de->name_len, hinfo);
 		}
 		if ((hinfo->hash < start_hash) ||
 		    ((hinfo->hash == start_hash) &&
@@ -1326,12 +1313,8 @@ static int dx_make_map(struct inode *dir, struct buffer_head *bh,
 		if (de->name_len && de->inode) {
 			if (ext4_hash_in_dirent(dir))
 				h.hash = EXT4_DIRENT_HASH(de);
-			else {
-				int err = ext4fs_dirhash(dir, de->name,
-						     de->name_len, &h);
-				if (err < 0)
-					return err;
-			}
+			else
+				ext4fs_dirhash(dir, de->name, de->name_len, &h);
 			map_tail--;
 			map_tail->hash = h.hash;
 			map_tail->offs = ((char *) de - base)>>2;
@@ -1469,9 +1452,10 @@ int ext4_fname_setup_ci_filename(struct inode *dir, const struct qstr *iname,
 	hinfo->hash_version = DX_HASH_SIPHASH;
 	hinfo->seed = NULL;
 	if (cf_name->name)
-		return ext4fs_dirhash(dir, cf_name->name, cf_name->len, hinfo);
+		ext4fs_dirhash(dir, cf_name->name, cf_name->len, hinfo);
 	else
-		return ext4fs_dirhash(dir, iname->name, iname->len, hinfo);
+		ext4fs_dirhash(dir, iname->name, iname->len, hinfo);
+	return 0;
 }
 #endif
 
@@ -2314,15 +2298,10 @@ static int make_indexed_dir(handle_t *handle, struct ext4_filename *fname,
 	fname->hinfo.seed = EXT4_SB(dir->i_sb)->s_hash_seed;
 
 	/* casefolded encrypted hashes are computed on fname setup */
-	if (!ext4_hash_in_dirent(dir)) {
-		int err = ext4fs_dirhash(dir, fname_name(fname),
-					 fname_len(fname), &fname->hinfo);
-		if (err < 0) {
-			brelse(bh2);
-			brelse(bh);
-			return err;
-		}
-	}
+	if (!ext4_hash_in_dirent(dir))
+		ext4fs_dirhash(dir, fname_name(fname),
+				fname_len(fname), &fname->hinfo);
+
 	memset(frames, 0, sizeof(frames));
 	frame = frames;
 	frame->entries = entries;
@@ -3848,10 +3827,19 @@ static int ext4_rename(struct user_namespace *mnt_userns, struct inode *old_dir,
 			return retval;
 	}
 
+	/*
+	 * We need to protect against old.inode directory getting converted
+	 * from inline directory format into a normal one.
+	 */
+	if (S_ISDIR(old.inode->i_mode))
+		inode_lock_nested(old.inode, I_MUTEX_NONDIR2);
+
 	old.bh = ext4_find_entry(old.dir, &old.dentry->d_name, &old.de,
 				 &old.inlined);
-	if (IS_ERR(old.bh))
-		return PTR_ERR(old.bh);
+	if (IS_ERR(old.bh)) {
+		retval = PTR_ERR(old.bh);
+		goto unlock_moved_dir;
+	}
 
 	/*
 	 *  Check for inode number is _not_ due to possible IO errors.
@@ -4040,6 +4028,10 @@ release_bh:
 	brelse(old.dir_bh);
 	brelse(old.bh);
 	brelse(new.bh);
+
+unlock_moved_dir:
+	if (S_ISDIR(old.inode->i_mode))
+		inode_unlock(old.inode);
 
 	return retval;
 }

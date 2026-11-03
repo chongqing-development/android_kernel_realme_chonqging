@@ -1855,7 +1855,7 @@ static int iavf_set_channels(struct net_device *netdev,
 	}
 	if (i == IAVF_RESET_WAIT_COMPLETE_COUNT) {
 		adapter->flags &= ~IAVF_FLAG_REINIT_ITR_NEEDED;
-		adapter->num_req_queues = 0;
+		adapter->num_active_queues = num_req;
 		return -EOPNOTSUPP;
 	}
 

@@ -2256,6 +2256,7 @@ static int fdp1_probe(struct platform_device *pdev)
 	struct fdp1_dev *fdp1;
 	struct video_device *vfd;
 	struct device_node *fcp_node;
+	struct resource *res;
 	struct clk *clk;
 	unsigned int i;
 
@@ -2282,15 +2283,17 @@ static int fdp1_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, fdp1);
 
 	/* Memory-mapped registers */
-	fdp1->regs = devm_platform_ioremap_resource(pdev, 0);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	fdp1->regs = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(fdp1->regs))
 		return PTR_ERR(fdp1->regs);
 
 	/* Interrupt service routine registration */
-	ret = platform_get_irq(pdev, 0);
-	if (ret < 0)
+	fdp1->irq = ret = platform_get_irq(pdev, 0);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "cannot find IRQ\n");
 		return ret;
-	fdp1->irq = ret;
+	}
 
 	ret = devm_request_irq(&pdev->dev, fdp1->irq, fdp1_irq_handler, 0,
 			       dev_name(&pdev->dev), fdp1);
@@ -2313,10 +2316,8 @@ static int fdp1_probe(struct platform_device *pdev)
 
 	/* Determine our clock rate */
 	clk = clk_get(&pdev->dev, NULL);
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		goto put_dev;
-	}
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
 
 	fdp1->clk_rate = clk_get_rate(clk);
 	clk_put(clk);
@@ -2325,7 +2326,7 @@ static int fdp1_probe(struct platform_device *pdev)
 	ret = v4l2_device_register(&pdev->dev, &fdp1->v4l2_dev);
 	if (ret) {
 		v4l2_err(&fdp1->v4l2_dev, "Failed to register video device\n");
-		goto put_dev;
+		return ret;
 	}
 
 	/* M2M registration */
@@ -2395,8 +2396,6 @@ release_m2m:
 unreg_dev:
 	v4l2_device_unregister(&fdp1->v4l2_dev);
 
-put_dev:
-	rcar_fcp_put(fdp1->fcp);
 	return ret;
 }
 
@@ -2408,7 +2407,7 @@ static int fdp1_remove(struct platform_device *pdev)
 	video_unregister_device(&fdp1->vfd);
 	v4l2_device_unregister(&fdp1->v4l2_dev);
 	pm_runtime_disable(&pdev->dev);
-	rcar_fcp_put(fdp1->fcp);
+
 	return 0;
 }
 

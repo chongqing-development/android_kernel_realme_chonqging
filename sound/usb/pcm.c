@@ -1571,7 +1571,7 @@ static int snd_usb_pcm_playback_ack(struct snd_pcm_substream *substream)
 	 * outputs here
 	 */
 	if (!ep->active_mask)
-		return snd_usb_queue_pending_output_urbs(ep, true);
+		snd_usb_queue_pending_output_urbs(ep, true);
 	return 0;
 }
 

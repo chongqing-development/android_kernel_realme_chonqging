@@ -1610,7 +1610,6 @@ out:
 int netlink_set_err(struct sock *ssk, u32 portid, u32 group, int code)
 {
 	struct netlink_set_err_data info;
-	unsigned long flags;
 	struct sock *sk;
 	int ret = 0;
 
@@ -1620,12 +1619,12 @@ int netlink_set_err(struct sock *ssk, u32 portid, u32 group, int code)
 	/* sk->sk_err wants a positive error value */
 	info.code = -code;
 
-	read_lock_irqsave(&nl_table_lock, flags);
+	read_lock(&nl_table_lock);
 
 	sk_for_each_bound(sk, &nl_table[ssk->sk_protocol].mc_list)
 		ret += do_one_set_err(sk, &info);
 
-	read_unlock_irqrestore(&nl_table_lock, flags);
+	read_unlock(&nl_table_lock);
 	return ret;
 }
 EXPORT_SYMBOL(netlink_set_err);
@@ -1753,8 +1752,7 @@ static int netlink_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
-	unsigned int flag;
-	int len, val;
+	int len, val, err;
 
 	if (level != SOL_NETLINK)
 		return -ENOPROTOOPT;
@@ -1766,17 +1764,39 @@ static int netlink_getsockopt(struct socket *sock, int level, int optname,
 
 	switch (optname) {
 	case NETLINK_PKTINFO:
-		flag = NETLINK_F_RECV_PKTINFO;
+		if (len < sizeof(int))
+			return -EINVAL;
+		len = sizeof(int);
+		val = nlk->flags & NETLINK_F_RECV_PKTINFO ? 1 : 0;
+		if (put_user(len, optlen) ||
+		    put_user(val, optval))
+			return -EFAULT;
+		err = 0;
 		break;
 	case NETLINK_BROADCAST_ERROR:
-		flag = NETLINK_F_BROADCAST_SEND_ERROR;
+		if (len < sizeof(int))
+			return -EINVAL;
+		len = sizeof(int);
+		val = nlk->flags & NETLINK_F_BROADCAST_SEND_ERROR ? 1 : 0;
+		if (put_user(len, optlen) ||
+		    put_user(val, optval))
+			return -EFAULT;
+		err = 0;
 		break;
 	case NETLINK_NO_ENOBUFS:
-		flag = NETLINK_F_RECV_NO_ENOBUFS;
+		if (len < sizeof(int))
+			return -EINVAL;
+		len = sizeof(int);
+		val = nlk->flags & NETLINK_F_RECV_NO_ENOBUFS ? 1 : 0;
+		if (put_user(len, optlen) ||
+		    put_user(val, optval))
+			return -EFAULT;
+		err = 0;
 		break;
 	case NETLINK_LIST_MEMBERSHIPS: {
-		int pos, idx, shift, err = 0;
+		int pos, idx, shift;
 
+		err = 0;
 		netlink_lock_table();
 		for (pos = 0; pos * 8 < nlk->ngroups; pos += sizeof(u32)) {
 			if (len - pos < sizeof(u32))
@@ -1790,35 +1810,43 @@ static int netlink_getsockopt(struct socket *sock, int level, int optname,
 				break;
 			}
 		}
-		if (put_user(ALIGN(BITS_TO_BYTES(nlk->ngroups), sizeof(u32)), optlen))
+		if (put_user(ALIGN(nlk->ngroups / 8, sizeof(u32)), optlen))
 			err = -EFAULT;
 		netlink_unlock_table();
-		return err;
+		break;
 	}
 	case NETLINK_CAP_ACK:
-		flag = NETLINK_F_CAP_ACK;
+		if (len < sizeof(int))
+			return -EINVAL;
+		len = sizeof(int);
+		val = nlk->flags & NETLINK_F_CAP_ACK ? 1 : 0;
+		if (put_user(len, optlen) ||
+		    put_user(val, optval))
+			return -EFAULT;
+		err = 0;
 		break;
 	case NETLINK_EXT_ACK:
-		flag = NETLINK_F_EXT_ACK;
+		if (len < sizeof(int))
+			return -EINVAL;
+		len = sizeof(int);
+		val = nlk->flags & NETLINK_F_EXT_ACK ? 1 : 0;
+		if (put_user(len, optlen) || put_user(val, optval))
+			return -EFAULT;
+		err = 0;
 		break;
 	case NETLINK_GET_STRICT_CHK:
-		flag = NETLINK_F_STRICT_CHK;
+		if (len < sizeof(int))
+			return -EINVAL;
+		len = sizeof(int);
+		val = nlk->flags & NETLINK_F_STRICT_CHK ? 1 : 0;
+		if (put_user(len, optlen) || put_user(val, optval))
+			return -EFAULT;
+		err = 0;
 		break;
 	default:
-		return -ENOPROTOOPT;
+		err = -ENOPROTOOPT;
 	}
-
-	if (len < sizeof(int))
-		return -EINVAL;
-
-	len = sizeof(int);
-	val = nlk->flags & flag ? 1 : 0;
-
-	if (put_user(len, optlen) ||
-	    copy_to_user(optval, &val, len))
-		return -EFAULT;
-
-	return 0;
+	return err;
 }
 
 static void netlink_cmsg_recv_pktinfo(struct msghdr *msg, struct sk_buff *skb)
@@ -2001,7 +2029,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	skb_free_datagram(sk, skb);
 
-	if (READ_ONCE(nlk->cb_running) &&
+	if (nlk->cb_running &&
 	    atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf / 2) {
 		ret = netlink_dump(sk);
 		if (ret) {
@@ -2313,7 +2341,7 @@ static int netlink_dump(struct sock *sk)
 	if (cb->done)
 		cb->done(cb);
 
-	WRITE_ONCE(nlk->cb_running, false);
+	nlk->cb_running = false;
 	module = cb->module;
 	skb = cb->skb;
 	mutex_unlock(nlk->cb_mutex);
@@ -2376,7 +2404,7 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 			goto error_put;
 	}
 
-	WRITE_ONCE(nlk->cb_running, true);
+	nlk->cb_running = true;
 	nlk->dump_done_errno = INT_MAX;
 
 	mutex_unlock(nlk->cb_mutex);
@@ -2662,7 +2690,7 @@ static int netlink_native_seq_show(struct seq_file *seq, void *v)
 			   nlk->groups ? (u32)nlk->groups[0] : 0,
 			   sk_rmem_alloc_get(s),
 			   sk_wmem_alloc_get(s),
-			   READ_ONCE(nlk->cb_running),
+			   nlk->cb_running,
 			   refcount_read(&s->sk_refcnt),
 			   atomic_read(&s->sk_drops),
 			   sock_i_ino(s)

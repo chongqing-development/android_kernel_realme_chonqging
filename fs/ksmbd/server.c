@@ -184,31 +184,24 @@ static void __handle_ksmbd_work(struct ksmbd_work *work,
 		goto send;
 	}
 
-	do {
-		if (conn->ops->check_user_session) {
-			rc = conn->ops->check_user_session(work);
+	if (conn->ops->check_user_session) {
+		rc = conn->ops->check_user_session(work);
+		if (rc < 0) {
+			command = conn->ops->get_cmd_val(work);
+			conn->ops->set_rsp_status(work,
+					STATUS_USER_SESSION_DELETED);
+			goto send;
+		} else if (rc > 0) {
+			rc = conn->ops->get_ksmbd_tcon(work);
 			if (rc < 0) {
-				if (rc == -EINVAL)
-					conn->ops->set_rsp_status(work,
-						STATUS_INVALID_PARAMETER);
-				else
-					conn->ops->set_rsp_status(work,
-						STATUS_USER_SESSION_DELETED);
+				conn->ops->set_rsp_status(work,
+					STATUS_NETWORK_NAME_DELETED);
 				goto send;
-			} else if (rc > 0) {
-				rc = conn->ops->get_ksmbd_tcon(work);
-				if (rc < 0) {
-					if (rc == -EINVAL)
-						conn->ops->set_rsp_status(work,
-							STATUS_INVALID_PARAMETER);
-					else
-						conn->ops->set_rsp_status(work,
-							STATUS_NETWORK_NAME_DELETED);
-					goto send;
-				}
 			}
 		}
+	}
 
+	do {
 		rc = __process_request(work, conn, &command);
 		if (rc == SERVER_HANDLER_ABORT)
 			break;
@@ -618,7 +611,6 @@ err_unregister:
 static void __exit ksmbd_server_exit(void)
 {
 	ksmbd_server_shutdown();
-	rcu_barrier();
 	ksmbd_release_inode_hash();
 }
 

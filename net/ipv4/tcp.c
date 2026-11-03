@@ -502,7 +502,6 @@ __poll_t tcp_poll(struct file *file, struct socket *sock, poll_table *wait)
 	__poll_t mask;
 	struct sock *sk = sock->sk;
 	const struct tcp_sock *tp = tcp_sk(sk);
-	u8 shutdown;
 	int state;
 
 	sock_poll_wait(file, sock, wait);
@@ -545,10 +544,9 @@ __poll_t tcp_poll(struct file *file, struct socket *sock, poll_table *wait)
 	 * NOTE. Check for TCP_CLOSE is added. The goal is to prevent
 	 * blocking on fresh not-connected or disconnected socket. --ANK
 	 */
-	shutdown = READ_ONCE(sk->sk_shutdown);
-	if (shutdown == SHUTDOWN_MASK || state == TCP_CLOSE)
+	if (sk->sk_shutdown == SHUTDOWN_MASK || state == TCP_CLOSE)
 		mask |= EPOLLHUP;
-	if (shutdown & RCV_SHUTDOWN)
+	if (sk->sk_shutdown & RCV_SHUTDOWN)
 		mask |= EPOLLIN | EPOLLRDNORM | EPOLLRDHUP;
 
 	/* Connected or passive Fast Open socket? */
@@ -564,7 +562,7 @@ __poll_t tcp_poll(struct file *file, struct socket *sock, poll_table *wait)
 		if (tcp_stream_is_readable(sk, target))
 			mask |= EPOLLIN | EPOLLRDNORM;
 
-		if (!(shutdown & SEND_SHUTDOWN)) {
+		if (!(sk->sk_shutdown & SEND_SHUTDOWN)) {
 			if (__sk_stream_is_writeable(sk, 1)) {
 				mask |= EPOLLOUT | EPOLLWRNORM;
 			} else {  /* send SIGIO later */
@@ -2742,7 +2740,7 @@ void __tcp_close(struct sock *sk, long timeout)
 	int data_was_unread = 0;
 	int state;
 
-	WRITE_ONCE(sk->sk_shutdown, SHUTDOWN_MASK);
+	sk->sk_shutdown = SHUTDOWN_MASK;
 
 	if (sk->sk_state == TCP_LISTEN) {
 		tcp_set_state(sk, TCP_CLOSE);
@@ -3008,7 +3006,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
 		inet_reset_saddr(sk);
 
-	WRITE_ONCE(sk->sk_shutdown, 0);
+	sk->sk_shutdown = 0;
 	sock_reset_flag(sk, SOCK_DONE);
 	tp->srtt_us = 0;
 	tp->mdev_us = jiffies_to_usecs(TCP_TIMEOUT_INIT);
@@ -3290,7 +3288,7 @@ int tcp_sock_set_syncnt(struct sock *sk, int val)
 		return -EINVAL;
 
 	lock_sock(sk);
-	WRITE_ONCE(inet_csk(sk)->icsk_syn_retries, val);
+	inet_csk(sk)->icsk_syn_retries = val;
 	release_sock(sk);
 	return 0;
 }
@@ -3299,7 +3297,7 @@ EXPORT_SYMBOL(tcp_sock_set_syncnt);
 void tcp_sock_set_user_timeout(struct sock *sk, u32 val)
 {
 	lock_sock(sk);
-	WRITE_ONCE(inet_csk(sk)->icsk_user_timeout, val);
+	inet_csk(sk)->icsk_user_timeout = val;
 	release_sock(sk);
 }
 EXPORT_SYMBOL(tcp_sock_set_user_timeout);
@@ -3311,8 +3309,7 @@ int tcp_sock_set_keepidle_locked(struct sock *sk, int val)
 	if (val < 1 || val > MAX_TCP_KEEPIDLE)
 		return -EINVAL;
 
-	/* Paired with WRITE_ONCE() in keepalive_time_when() */
-	WRITE_ONCE(tp->keepalive_time, val * HZ);
+	tp->keepalive_time = val * HZ;
 	if (sock_flag(sk, SOCK_KEEPOPEN) &&
 	    !((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN))) {
 		u32 elapsed = keepalive_time_elapsed(tp);
@@ -3344,7 +3341,7 @@ int tcp_sock_set_keepintvl(struct sock *sk, int val)
 		return -EINVAL;
 
 	lock_sock(sk);
-	WRITE_ONCE(tcp_sk(sk)->keepalive_intvl, val * HZ);
+	tcp_sk(sk)->keepalive_intvl = val * HZ;
 	release_sock(sk);
 	return 0;
 }
@@ -3356,8 +3353,7 @@ int tcp_sock_set_keepcnt(struct sock *sk, int val)
 		return -EINVAL;
 
 	lock_sock(sk);
-	/* Paired with READ_ONCE() in keepalive_probes() */
-	WRITE_ONCE(tcp_sk(sk)->keepalive_probes, val);
+	tcp_sk(sk)->keepalive_probes = val;
 	release_sock(sk);
 	return 0;
 }
@@ -3559,19 +3555,19 @@ static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		if (val < 1 || val > MAX_TCP_KEEPINTVL)
 			err = -EINVAL;
 		else
-			WRITE_ONCE(tp->keepalive_intvl, val * HZ);
+			tp->keepalive_intvl = val * HZ;
 		break;
 	case TCP_KEEPCNT:
 		if (val < 1 || val > MAX_TCP_KEEPCNT)
 			err = -EINVAL;
 		else
-			WRITE_ONCE(tp->keepalive_probes, val);
+			tp->keepalive_probes = val;
 		break;
 	case TCP_SYNCNT:
 		if (val < 1 || val > MAX_TCP_SYNCNT)
 			err = -EINVAL;
 		else
-			WRITE_ONCE(icsk->icsk_syn_retries, val);
+			icsk->icsk_syn_retries = val;
 		break;
 
 	case TCP_SAVE_SYN:
@@ -3584,18 +3580,18 @@ static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 
 	case TCP_LINGER2:
 		if (val < 0)
-			WRITE_ONCE(tp->linger2, -1);
+			tp->linger2 = -1;
 		else if (val > TCP_FIN_TIMEOUT_MAX / HZ)
-			WRITE_ONCE(tp->linger2, TCP_FIN_TIMEOUT_MAX);
+			tp->linger2 = TCP_FIN_TIMEOUT_MAX;
 		else
-			WRITE_ONCE(tp->linger2, val * HZ);
+			tp->linger2 = val * HZ;
 		break;
 
 	case TCP_DEFER_ACCEPT:
 		/* Translate value in seconds to number of retransmits */
-		WRITE_ONCE(icsk->icsk_accept_queue.rskq_defer_accept,
-			   secs_to_retrans(val, TCP_TIMEOUT_INIT / HZ,
-					   TCP_RTO_MAX / HZ));
+		icsk->icsk_accept_queue.rskq_defer_accept =
+			secs_to_retrans(val, TCP_TIMEOUT_INIT / HZ,
+					TCP_RTO_MAX / HZ);
 		break;
 
 	case TCP_WINDOW_CLAMP:
@@ -3619,7 +3615,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		if (val < 0)
 			err = -EINVAL;
 		else
-			WRITE_ONCE(icsk->icsk_user_timeout, val);
+			icsk->icsk_user_timeout = val;
 		break;
 
 	case TCP_FASTOPEN:
@@ -3663,7 +3659,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		err = tcp_repair_set_window(tp, optval, optlen);
 		break;
 	case TCP_NOTSENT_LOWAT:
-		WRITE_ONCE(tp->notsent_lowat, val);
+		tp->notsent_lowat = val;
 		sk->sk_write_space(sk);
 		break;
 	case TCP_INQ:
@@ -3675,7 +3671,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 	case TCP_TX_DELAY:
 		if (val)
 			tcp_enable_tx_delay();
-		WRITE_ONCE(tp->tcp_tx_delay, val);
+		tp->tcp_tx_delay = val;
 		break;
 	default:
 		err = -ENOPROTOOPT;
@@ -3963,8 +3959,7 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 	switch (optname) {
 	case TCP_MAXSEG:
 		val = tp->mss_cache;
-		if (tp->rx_opt.user_mss &&
-		    ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN)))
+		if (!val && ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN)))
 			val = tp->rx_opt.user_mss;
 		if (tp->repair)
 			val = tp->rx_opt.mss_clamp;
@@ -3985,18 +3980,17 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		val = keepalive_probes(tp);
 		break;
 	case TCP_SYNCNT:
-		val = READ_ONCE(icsk->icsk_syn_retries) ? :
+		val = icsk->icsk_syn_retries ? :
 			READ_ONCE(net->ipv4.sysctl_tcp_syn_retries);
 		break;
 	case TCP_LINGER2:
-		val = READ_ONCE(tp->linger2);
+		val = tp->linger2;
 		if (val >= 0)
 			val = (val ? : READ_ONCE(net->ipv4.sysctl_tcp_fin_timeout)) / HZ;
 		break;
 	case TCP_DEFER_ACCEPT:
-		val = READ_ONCE(icsk->icsk_accept_queue.rskq_defer_accept);
-		val = retrans_to_secs(val, TCP_TIMEOUT_INIT / HZ,
-				      TCP_RTO_MAX / HZ);
+		val = retrans_to_secs(icsk->icsk_accept_queue.rskq_defer_accept,
+				      TCP_TIMEOUT_INIT / HZ, TCP_RTO_MAX / HZ);
 		break;
 	case TCP_WINDOW_CLAMP:
 		val = tp->window_clamp;
@@ -4132,11 +4126,11 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		break;
 
 	case TCP_USER_TIMEOUT:
-		val = READ_ONCE(icsk->icsk_user_timeout);
+		val = icsk->icsk_user_timeout;
 		break;
 
 	case TCP_FASTOPEN:
-		val = READ_ONCE(icsk->icsk_accept_queue.fastopenq.max_qlen);
+		val = icsk->icsk_accept_queue.fastopenq.max_qlen;
 		break;
 
 	case TCP_FASTOPEN_CONNECT:
@@ -4148,14 +4142,14 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		break;
 
 	case TCP_TX_DELAY:
-		val = READ_ONCE(tp->tcp_tx_delay);
+		val = tp->tcp_tx_delay;
 		break;
 
 	case TCP_TIMESTAMP:
 		val = tcp_time_stamp_raw() + tp->tsoffset;
 		break;
 	case TCP_NOTSENT_LOWAT:
-		val = READ_ONCE(tp->notsent_lowat);
+		val = tp->notsent_lowat;
 		break;
 	case TCP_INQ:
 		val = tp->recvmsg_inq;
@@ -4459,7 +4453,7 @@ void tcp_done(struct sock *sk)
 	if (req)
 		reqsk_fastopen_remove(sk, req, false);
 
-	WRITE_ONCE(sk->sk_shutdown, SHUTDOWN_MASK);
+	sk->sk_shutdown = SHUTDOWN_MASK;
 
 	if (!sock_flag(sk, SOCK_DEAD))
 		sk->sk_state_change(sk);

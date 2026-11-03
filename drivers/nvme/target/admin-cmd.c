@@ -508,11 +508,7 @@ static void nvmet_execute_identify_ns(struct nvmet_req *req)
 		goto done;
 	}
 
-	if (nvmet_ns_revalidate(req->ns)) {
-		mutex_lock(&req->ns->subsys->lock);
-		nvmet_ns_changed(req->ns->subsys, req->ns->nsid);
-		mutex_unlock(&req->ns->subsys->lock);
-	}
+	nvmet_ns_revalidate(req->ns);
 
 	/*
 	 * nuse = ncap = nsze isn't always true, but we have no way to find
@@ -680,13 +676,6 @@ static bool nvmet_handle_identify_desclist(struct nvmet_req *req)
 	}
 }
 
-static void nvmet_execute_identify_ctrl_nvm(struct nvmet_req *req)
-{
-	/* Not supported: return zeroes */
-	nvmet_req_complete(req,
-		   nvmet_zero_sgl(req, 0, sizeof(struct nvme_id_ctrl_nvm)));
-}
-
 static void nvmet_execute_identify(struct nvmet_req *req)
 {
 	if (!nvmet_check_transfer_len(req, NVME_IDENTIFY_DATA_SIZE))
@@ -694,8 +683,13 @@ static void nvmet_execute_identify(struct nvmet_req *req)
 
 	switch (req->cmd->identify.cns) {
 	case NVME_ID_CNS_NS:
-		nvmet_execute_identify_ns(req);
-		return;
+		switch (req->cmd->identify.csi) {
+		case NVME_CSI_NVM:
+			return nvmet_execute_identify_ns(req);
+		default:
+			break;
+		}
+		break;
 	case NVME_ID_CNS_CS_NS:
 		if (IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
 			switch (req->cmd->identify.csi) {
@@ -707,24 +701,29 @@ static void nvmet_execute_identify(struct nvmet_req *req)
 		}
 		break;
 	case NVME_ID_CNS_CTRL:
-		nvmet_execute_identify_ctrl(req);
-		return;
-	case NVME_ID_CNS_CS_CTRL:
 		switch (req->cmd->identify.csi) {
 		case NVME_CSI_NVM:
-			nvmet_execute_identify_ctrl_nvm(req);
-			return;
-		case NVME_CSI_ZNS:
-			if (IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
-				nvmet_execute_identify_ctrl_zns(req);
-				return;
+			return nvmet_execute_identify_ctrl(req);
+		}
+		break;
+	case NVME_ID_CNS_CS_CTRL:
+		if (IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
+			switch (req->cmd->identify.csi) {
+			case NVME_CSI_ZNS:
+				return nvmet_execute_identify_cns_cs_ctrl(req);
+			default:
+				break;
 			}
-			break;
 		}
 		break;
 	case NVME_ID_CNS_NS_ACTIVE_LIST:
-		nvmet_execute_identify_nslist(req);
-		return;
+		switch (req->cmd->identify.csi) {
+		case NVME_CSI_NVM:
+			return nvmet_execute_identify_nslist(req);
+		default:
+			break;
+		}
+		break;
 	case NVME_ID_CNS_NS_DESC_LIST:
 		if (nvmet_handle_identify_desclist(req) == true)
 			return;

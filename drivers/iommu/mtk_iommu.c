@@ -2751,14 +2751,6 @@ out:
 		goto skip_smi;
 	}
 
-	if (MTK_IOMMU_HAS_FLAG(data->plat_data, PGTABLE_PA_35_EN)) {
-		ret = dma_set_mask(dev, DMA_BIT_MASK(35));
-		if (ret) {
-			dev_err(dev, "Failed to set dma_mask 35.\n");
-			return ret;
-		}
-	}
-
 	if (data->plat_data->iommu_type != MM_IOMMU ||
 	    MTK_IOMMU_HAS_FLAG(data->plat_data, IOMMU_EN_PRE)) {
 		dev_info(dev, "skip smi\n");

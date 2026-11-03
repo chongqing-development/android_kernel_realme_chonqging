@@ -85,24 +85,19 @@ static struct iommu_table_group *iommu_pseries_alloc_group(int node)
 static void iommu_pseries_free_group(struct iommu_table_group *table_group,
 		const char *node_name)
 {
+	struct iommu_table *tbl;
+
 	if (!table_group)
 		return;
 
+	tbl = table_group->tables[0];
 #ifdef CONFIG_IOMMU_API
 	if (table_group->group) {
 		iommu_group_put(table_group->group);
 		BUG_ON(table_group->group);
 	}
 #endif
-
-	/* Default DMA window table is at index 0, while DDW at 1. SR-IOV
-	 * adapters only have table on index 1.
-	 */
-	if (table_group->tables[0])
-		iommu_tce_table_put(table_group->tables[0]);
-
-	if (table_group->tables[1])
-		iommu_tce_table_put(table_group->tables[1]);
+	iommu_tce_table_put(tbl);
 
 	kfree(table_group);
 }
@@ -311,22 +306,13 @@ static void tce_free_pSeriesLP(unsigned long liobn, long tcenum, long tceshift,
 static void tce_freemulti_pSeriesLP(struct iommu_table *tbl, long tcenum, long npages)
 {
 	u64 rc;
-	long rpages = npages;
-	unsigned long limit;
 
 	if (!firmware_has_feature(FW_FEATURE_STUFF_TCE))
 		return tce_free_pSeriesLP(tbl->it_index, tcenum,
 					  tbl->it_page_shift, npages);
 
-	do {
-		limit = min_t(unsigned long, rpages, 512);
-
-		rc = plpar_tce_stuff((u64)tbl->it_index,
-				     (u64)tcenum << tbl->it_page_shift, 0, limit);
-
-		rpages -= limit;
-		tcenum += limit;
-	} while (rpages > 0 && !rc);
+	rc = plpar_tce_stuff((u64)tbl->it_index,
+			     (u64)tcenum << tbl->it_page_shift, 0, npages);
 
 	if (rc && printk_ratelimit()) {
 		printk("tce_freemulti_pSeriesLP: plpar_tce_stuff failed\n");

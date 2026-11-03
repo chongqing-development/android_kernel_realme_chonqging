@@ -1148,10 +1148,10 @@ static int ethoc_probe(struct platform_device *pdev)
 
 	/* Allow the platform setup code to pass in a MAC address. */
 	if (pdata) {
-		eth_hw_addr_set(netdev, pdata->hwaddr);
+		ether_addr_copy(netdev->dev_addr, pdata->hwaddr);
 		priv->phy_id = pdata->phy_id;
 	} else {
-		of_get_ethdev_address(pdev->dev.of_node, netdev);
+		of_get_mac_address(pdev->dev.of_node, netdev->dev_addr);
 		priv->phy_id = -1;
 	}
 

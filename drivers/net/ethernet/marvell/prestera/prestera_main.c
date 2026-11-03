@@ -141,7 +141,7 @@ static int prestera_port_set_mac_address(struct net_device *dev, void *p)
 	if (err)
 		return err;
 
-	eth_hw_addr_set(dev, addr->sa_data);
+	ether_addr_copy(dev->dev_addr, addr->sa_data);
 
 	return 0;
 }

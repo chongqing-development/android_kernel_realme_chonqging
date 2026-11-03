@@ -875,7 +875,6 @@ static bool disk_has_partitions(struct gendisk *disk)
 void blk_queue_set_zoned(struct gendisk *disk, enum blk_zoned_model model)
 {
 	struct request_queue *q = disk->queue;
-	unsigned int old_model = q->limits.zoned;
 
 	switch (model) {
 	case BLK_ZONED_HM:
@@ -913,7 +912,7 @@ void blk_queue_set_zoned(struct gendisk *disk, enum blk_zoned_model model)
 		 */
 		blk_queue_zone_write_granularity(q,
 						queue_logical_block_size(q));
-	} else if (old_model != BLK_ZONED_NONE) {
+	} else {
 		blk_queue_clear_zone_settings(q);
 	}
 }

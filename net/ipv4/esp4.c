@@ -1133,7 +1133,7 @@ static int esp_init_authenc(struct xfrm_state *x)
 	err = crypto_aead_setkey(aead, key, keylen);
 
 free_key:
-	kfree_sensitive(key);
+	kfree(key);
 
 error:
 	return err;

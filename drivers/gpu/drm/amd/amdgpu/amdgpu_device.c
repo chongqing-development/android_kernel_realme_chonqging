@@ -75,10 +75,6 @@
 
 #include <drm/drm_drv.h>
 
-#if IS_ENABLED(CONFIG_X86)
-#include <asm/intel-family.h>
-#endif
-
 MODULE_FIRMWARE("amdgpu/vega10_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/vega12_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/raven_gpu_info.bin");
@@ -1341,17 +1337,6 @@ bool amdgpu_device_should_use_aspm(struct amdgpu_device *adev)
 	return pcie_aspm_enabled(adev->pdev);
 }
 
-bool amdgpu_device_aspm_support_quirk(void)
-{
-#if IS_ENABLED(CONFIG_X86)
-	struct cpuinfo_x86 *c = &cpu_data(0);
-
-	return !(c->x86 == 6 && c->x86_model == INTEL_FAM6_ALDERLAKE);
-#else
-	return true;
-#endif
-}
-
 /* if we get transitioned to only one device, take VGA back */
 /**
  * amdgpu_device_vga_set_decode - enable/disable vga decode
@@ -2509,6 +2494,8 @@ static int amdgpu_device_ip_init(struct amdgpu_device *adev)
 	amdgpu_fru_get_product_info(adev);
 
 init_failed:
+	if (amdgpu_sriov_vf(adev))
+		amdgpu_virt_release_full_gpu(adev, true);
 
 	return r;
 }
@@ -3494,7 +3481,6 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	int r, i;
 	bool px = false;
 	u32 max_MBps;
-	int tmp;
 
 	adev->shutdown = false;
 	adev->flags = flags;
@@ -3694,13 +3680,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 				}
 			}
 		} else {
-			tmp = amdgpu_reset_method;
-			/* It should do a default reset when loading or reloading the driver,
-			 * regardless of the module parameter reset_method.
-			 */
-			amdgpu_reset_method = AMD_RESET_METHOD_NONE;
 			r = amdgpu_asic_reset(adev);
-			amdgpu_reset_method = tmp;
 			if (r) {
 				dev_err(adev->dev, "asic reset on init failed\n");
 				goto failed;
@@ -3760,6 +3740,18 @@ fence_driver_init:
 
 	r = amdgpu_device_ip_init(adev);
 	if (r) {
+		/* failed in exclusive mode due to timeout */
+		if (amdgpu_sriov_vf(adev) &&
+		    !amdgpu_sriov_runtime(adev) &&
+		    amdgpu_virt_mmio_blocked(adev) &&
+		    !amdgpu_virt_wait_reset(adev)) {
+			dev_err(adev->dev, "VF exclusive mode timeout\n");
+			/* Don't send request since VF is inactive. */
+			adev->virt.caps &= ~AMDGPU_SRIOV_CAPS_RUNTIME;
+			adev->virt.ops = NULL;
+			r = -EAGAIN;
+			goto release_ras_con;
+		}
 		dev_err(adev->dev, "amdgpu_device_ip_init failed\n");
 		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_AMDGPU_INIT_FAIL, 0, 0);
 		goto release_ras_con;
@@ -3838,10 +3830,8 @@ fence_driver_init:
 				   msecs_to_jiffies(AMDGPU_RESUME_MS));
 	}
 
-	if (amdgpu_sriov_vf(adev)) {
-		amdgpu_virt_release_full_gpu(adev, true);
+	if (amdgpu_sriov_vf(adev))
 		flush_delayed_work(&adev->delayed_init_work);
-	}
 
 	r = sysfs_create_files(&adev->dev->kobj, amdgpu_dev_attributes);
 	if (r)
@@ -3876,20 +3866,6 @@ fence_driver_init:
 	return 0;
 
 release_ras_con:
-	if (amdgpu_sriov_vf(adev))
-		amdgpu_virt_release_full_gpu(adev, true);
-
-	/* failed in exclusive mode due to timeout */
-	if (amdgpu_sriov_vf(adev) &&
-		!amdgpu_sriov_runtime(adev) &&
-		amdgpu_virt_mmio_blocked(adev) &&
-		!amdgpu_virt_wait_reset(adev)) {
-		dev_err(adev->dev, "VF exclusive mode timeout\n");
-		/* Don't send request since VF is inactive. */
-		adev->virt.caps &= ~AMDGPU_SRIOV_CAPS_RUNTIME;
-		adev->virt.ops = NULL;
-		r = -EAGAIN;
-	}
 	amdgpu_release_ras_context(adev);
 
 failed:
@@ -4377,11 +4353,7 @@ static int amdgpu_device_recover_vram(struct amdgpu_device *adev)
 	dev_info(adev->dev, "recover vram bo from shadow start\n");
 	mutex_lock(&adev->shadow_list_lock);
 	list_for_each_entry(vmbo, &adev->shadow_list, shadow_list) {
-		/* If vm is compute context or adev is APU, shadow will be NULL */
-		if (!vmbo->shadow)
-			continue;
-		shadow = vmbo->shadow;
-
+		shadow = &vmbo->bo;
 		/* No need to recover an evicted BO */
 		if (shadow->tbo.resource->mem_type != TTM_PL_TT ||
 		    shadow->tbo.resource->start == AMDGPU_BO_INVALID_OFFSET ||

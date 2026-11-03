@@ -3235,7 +3235,9 @@ static int bnxt_re_process_raw_qp_pkt_rx(struct bnxt_re_qp *gsi_qp,
 	udwr.remote_qkey = gsi_sqp->qplib_qp.qkey;
 
 	/* post data received  in the send queue */
-	return bnxt_re_post_send_shadow_qp(rdev, gsi_sqp, swr);
+	rc = bnxt_re_post_send_shadow_qp(rdev, gsi_sqp, swr);
+
+	return 0;
 }
 
 static void bnxt_re_process_res_rawqp1_wc(struct ib_wc *wc,

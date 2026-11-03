@@ -30,7 +30,6 @@ static DEFINE_RWLOCK(lease_list_lock);
 static struct oplock_info *alloc_opinfo(struct ksmbd_work *work,
 					u64 id, __u16 Tid)
 {
-	struct ksmbd_conn *conn = work->conn;
 	struct ksmbd_session *sess = work->sess;
 	struct oplock_info *opinfo;
 
@@ -39,7 +38,7 @@ static struct oplock_info *alloc_opinfo(struct ksmbd_work *work,
 		return NULL;
 
 	opinfo->sess = sess;
-	opinfo->conn = conn;
+	opinfo->conn = sess->conn;
 	opinfo->level = SMB2_OPLOCK_LEVEL_NONE;
 	opinfo->op_state = OPLOCK_STATE_NONE;
 	opinfo->pending_break = 0;
@@ -973,7 +972,7 @@ int find_same_lease_key(struct ksmbd_session *sess, struct ksmbd_inode *ci,
 	}
 
 	list_for_each_entry(lb, &lease_table_list, l_entry) {
-		if (!memcmp(lb->client_guid, sess->ClientGUID,
+		if (!memcmp(lb->client_guid, sess->conn->ClientGUID,
 			    SMB2_CLIENT_GUID_SIZE))
 			goto found;
 	}
@@ -989,7 +988,7 @@ found:
 		rcu_read_unlock();
 		if (opinfo->o_fp->f_ci == ci)
 			goto op_next;
-		err = compare_guid_key(opinfo, sess->ClientGUID,
+		err = compare_guid_key(opinfo, sess->conn->ClientGUID,
 				       lctx->lease_key);
 		if (err) {
 			err = -EINVAL;
@@ -1123,7 +1122,7 @@ int smb_grant_oplock(struct ksmbd_work *work, int req_op_level, u64 pid,
 		struct oplock_info *m_opinfo;
 
 		/* is lease already granted ? */
-		m_opinfo = same_client_has_lease(ci, sess->ClientGUID,
+		m_opinfo = same_client_has_lease(ci, sess->conn->ClientGUID,
 						 lctx);
 		if (m_opinfo) {
 			copy_lease(m_opinfo, opinfo);
@@ -1241,7 +1240,7 @@ void smb_break_all_levII_oplock(struct ksmbd_work *work, struct ksmbd_file *fp,
 {
 	struct oplock_info *op, *brk_op;
 	struct ksmbd_inode *ci;
-	struct ksmbd_conn *conn = work->conn;
+	struct ksmbd_conn *conn = work->sess->conn;
 
 	if (!test_share_config_flag(work->tcon->share_conf,
 				    KSMBD_SHARE_FLAG_OPLOCKS))
@@ -1446,12 +1445,11 @@ struct lease_ctx_info *parse_lease_state(void *open_req)
  * smb2_find_context_vals() - find a particular context info in open request
  * @open_req:	buffer containing smb2 file open(create) request
  * @tag:	context name to search for
- * @tag_len:	the length of tag
  *
  * Return:	pointer to requested context, NULL if @str context not found
  *		or error pointer if name length is invalid.
  */
-struct create_context *smb2_find_context_vals(void *open_req, const char *tag, int tag_len)
+struct create_context *smb2_find_context_vals(void *open_req, const char *tag)
 {
 	struct create_context *cc;
 	unsigned int next = 0;
@@ -1490,7 +1488,7 @@ struct create_context *smb2_find_context_vals(void *open_req, const char *tag, i
 			return ERR_PTR(-EINVAL);
 
 		name = (char *)cc + name_off;
-		if (name_len == tag_len && !memcmp(name, tag, name_len))
+		if (memcmp(name, tag, name_len) == 0)
 			return cc;
 
 		remain_len -= next;

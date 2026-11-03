@@ -68,14 +68,13 @@ static int inherit_flags(const struct inode *dir, umode_t mode)
  * @c: UBIFS file-system description object
  * @dir: parent directory inode
  * @mode: inode mode flags
- * @is_xattr: whether the inode is xattr inode
  *
  * This function finds an unused inode number, allocates new inode and
  * initializes it. Returns new inode in case of success and an error code in
  * case of failure.
  */
 struct inode *ubifs_new_inode(struct ubifs_info *c, struct inode *dir,
-			      umode_t mode, bool is_xattr)
+			      umode_t mode)
 {
 	int err;
 	struct inode *inode;
@@ -100,12 +99,10 @@ struct inode *ubifs_new_inode(struct ubifs_info *c, struct inode *dir,
 			 current_time(inode);
 	inode->i_mapping->nrpages = 0;
 
-	if (!is_xattr) {
-		err = fscrypt_prepare_new_inode(dir, inode, &encrypted);
-		if (err) {
-			ubifs_err(c, "fscrypt_prepare_new_inode failed: %i", err);
-			goto out_iput;
-		}
+	err = fscrypt_prepare_new_inode(dir, inode, &encrypted);
+	if (err) {
+		ubifs_err(c, "fscrypt_prepare_new_inode failed: %i", err);
+		goto out_iput;
 	}
 
 	switch (mode & S_IFMT) {
@@ -312,7 +309,7 @@ static int ubifs_create(struct user_namespace *mnt_userns, struct inode *dir,
 
 	sz_change = CALC_DENT_SIZE(fname_len(&nm));
 
-	inode = ubifs_new_inode(c, dir, mode, false);
+	inode = ubifs_new_inode(c, dir, mode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out_fname;
@@ -358,6 +355,7 @@ static struct inode *create_whiteout(struct inode *dir, struct dentry *dentry)
 	umode_t mode = S_IFCHR | WHITEOUT_MODE;
 	struct inode *inode;
 	struct ubifs_info *c = dir->i_sb->s_fs_info;
+	struct fscrypt_name nm;
 
 	/*
 	 * Create an inode('nlink = 1') for whiteout without updating journal,
@@ -368,7 +366,11 @@ static struct inode *create_whiteout(struct inode *dir, struct dentry *dentry)
 	dbg_gen("dent '%pd', mode %#hx in dir ino %lu",
 		dentry, mode, dir->i_ino);
 
-	inode = ubifs_new_inode(c, dir, mode, false);
+	err = fscrypt_setup_filename(dir, &dentry->d_name, 0, &nm);
+	if (err)
+		return ERR_PTR(err);
+
+	inode = ubifs_new_inode(c, dir, mode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out_free;
@@ -390,6 +392,7 @@ out_inode:
 	make_bad_inode(inode);
 	iput(inode);
 out_free:
+	fscrypt_free_filename(&nm);
 	ubifs_err(c, "cannot create whiteout file, error %d", err);
 	return ERR_PTR(err);
 }
@@ -459,7 +462,7 @@ static int ubifs_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
 		return err;
 	}
 
-	inode = ubifs_new_inode(c, dir, mode, false);
+	inode = ubifs_new_inode(c, dir, mode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out_budg;
@@ -485,7 +488,6 @@ static int ubifs_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
 	unlock_2_inodes(dir, inode);
 
 	ubifs_release_budget(c, &req);
-	fscrypt_free_filename(&nm);
 
 	return 0;
 
@@ -1002,7 +1004,7 @@ static int ubifs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
 
 	sz_change = CALC_DENT_SIZE(fname_len(&nm));
 
-	inode = ubifs_new_inode(c, dir, S_IFDIR | mode, false);
+	inode = ubifs_new_inode(c, dir, S_IFDIR | mode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out_fname;
@@ -1089,7 +1091,7 @@ static int ubifs_mknod(struct user_namespace *mnt_userns, struct inode *dir,
 
 	sz_change = CALC_DENT_SIZE(fname_len(&nm));
 
-	inode = ubifs_new_inode(c, dir, mode, false);
+	inode = ubifs_new_inode(c, dir, mode);
 	if (IS_ERR(inode)) {
 		kfree(dev);
 		err = PTR_ERR(inode);
@@ -1171,7 +1173,7 @@ static int ubifs_symlink(struct user_namespace *mnt_userns, struct inode *dir,
 
 	sz_change = CALC_DENT_SIZE(fname_len(&nm));
 
-	inode = ubifs_new_inode(c, dir, S_IFLNK | S_IRWXUGO, false);
+	inode = ubifs_new_inode(c, dir, S_IFLNK | S_IRWXUGO);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out_fname;

@@ -33,7 +33,7 @@ struct page *damon_get_page(unsigned long pfn)
 	return page;
 }
 
-void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr)
+void damon_ptep_mkold(pte_t *pte, struct mm_struct *mm, unsigned long addr)
 {
 	bool referenced = false;
 	struct page *page = damon_get_page(pte_pfn(*pte));
@@ -41,11 +41,13 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 	if (!page)
 		return;
 
-	if (ptep_test_and_clear_young(vma, addr, pte))
+	if (pte_young(*pte)) {
 		referenced = true;
+		*pte = pte_mkold(*pte);
+	}
 
 #ifdef CONFIG_MMU_NOTIFIER
-	if (mmu_notifier_clear_young(vma->vm_mm, addr, addr + PAGE_SIZE))
+	if (mmu_notifier_clear_young(mm, addr, addr + PAGE_SIZE))
 		referenced = true;
 #endif /* CONFIG_MMU_NOTIFIER */
 
@@ -56,7 +58,7 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 	put_page(page);
 }
 
-void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr)
+void damon_pmdp_mkold(pmd_t *pmd, struct mm_struct *mm, unsigned long addr)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	bool referenced = false;
@@ -65,11 +67,13 @@ void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr
 	if (!page)
 		return;
 
-	if (pmdp_test_and_clear_young(vma, addr, pmd))
+	if (pmd_young(*pmd)) {
 		referenced = true;
+		*pmd = pmd_mkold(*pmd);
+	}
 
 #ifdef CONFIG_MMU_NOTIFIER
-	if (mmu_notifier_clear_young(vma->vm_mm, addr,
+	if (mmu_notifier_clear_young(mm, addr,
 				addr + ((1UL) << HPAGE_PMD_SHIFT)))
 		referenced = true;
 #endif /* CONFIG_MMU_NOTIFIER */

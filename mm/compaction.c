@@ -45,11 +45,6 @@ static inline void count_compact_events(enum vm_event_item item, long delta)
 #define CREATE_TRACE_POINTS
 #include <trace/events/compaction.h>
 
-#undef CREATE_TRACE_POINTS
-#ifndef __GENKSYMS__
-#include <trace/hooks/mm.h>
-#endif
-
 #define block_start_pfn(pfn, order)	round_down(pfn, 1UL << (order))
 #define block_end_pfn(pfn, order)	ALIGN((pfn) + 1, 1UL << (order))
 #define pageblock_start_pfn(pfn)	block_start_pfn(pfn, pageblock_order)
@@ -1601,7 +1596,6 @@ static void isolate_freepages(struct compact_control *cc)
 	unsigned long low_pfn;	     /* lowest pfn scanner is able to scan */
 	struct list_head *freelist = &cc->freepages;
 	unsigned int stride;
-	bool bypass = false;
 
 	/* Try a small search of the free lists for a candidate */
 	isolate_start_pfn = fast_isolate_freepages(cc);
@@ -1655,10 +1649,6 @@ static void isolate_freepages(struct compact_control *cc)
 
 		/* If isolation recently failed, do not retry */
 		if (!isolation_suitable(cc, page))
-			continue;
-
-		trace_android_vh_isolate_freepages(cc, page, &bypass);
-		if (bypass)
 			continue;
 
 		/* Found a block suitable for isolating free pages from. */
@@ -2094,7 +2084,6 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 	unsigned int order;
 	const int migratetype = cc->migratetype;
 	int ret;
-	bool abort_compact = false;
 
 	/* Compaction run completes if the migrate and free scanner meet */
 	if (compact_scanners_met(cc)) {
@@ -2194,8 +2183,7 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 	}
 
 out:
-	trace_android_vh_compact_finished(&abort_compact);
-	if (cc->contended || fatal_signal_pending(current) || abort_compact)
+	if (cc->contended || fatal_signal_pending(current))
 		ret = COMPACT_CONTENDED;
 
 	return ret;

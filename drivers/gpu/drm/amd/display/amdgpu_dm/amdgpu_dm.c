@@ -354,35 +354,6 @@ static inline bool is_dc_timing_adjust_needed(struct dm_crtc_state *old_state,
 }
 
 /**
- * update_planes_and_stream_adapter() - Send planes to be updated in DC
- *
- * DC has a generic way to update planes and stream via
- * dc_update_planes_and_stream function; however, DM might need some
- * adjustments and preparation before calling it. This function is a wrapper
- * for the dc_update_planes_and_stream that does any required configuration
- * before passing control to DC.
- */
-static inline bool update_planes_and_stream_adapter(struct dc *dc,
-						    int update_type,
-						    int planes_count,
-						    struct dc_stream_state *stream,
-						    struct dc_stream_update *stream_update,
-						    struct dc_surface_update *array_of_surface_update)
-{
-	/*
-	 * Previous frame finished and HW is ready for optimization.
-	 */
-	if (update_type == UPDATE_TYPE_FAST)
-		dc_post_update_surfaces_to_stream(dc);
-
-	return dc_update_planes_and_stream(dc,
-					   array_of_surface_update,
-					   planes_count,
-					   stream,
-					   stream_update);
-}
-
-/**
  * dm_pflip_high_irq() - Handle pageflip interrupt
  * @interrupt_params: ignored
  *
@@ -1736,8 +1707,7 @@ static void amdgpu_dm_fini(struct amdgpu_device *adev)
 		dc_deinit_callbacks(adev->dm.dc);
 #endif
 
-	if (adev->dm.dc)
-		dc_dmub_srv_destroy(&adev->dm.dc->ctx->dmub_srv);
+	dc_dmub_srv_destroy(&adev->dm.dc->ctx->dmub_srv);
 
 	if (dc_enable_dmub_notifications(adev->dm.dc)) {
 		kfree(adev->dm.dmub_notify);
@@ -2579,13 +2549,10 @@ static void dm_gpureset_commit_state(struct dc_state *dc_state,
 			bundle->surface_updates[m].surface->force_full_update =
 				true;
 		}
-
-		update_planes_and_stream_adapter(dm->dc,
-					 UPDATE_TYPE_FULL,
-					 dc_state->stream_status->plane_count,
-					 dc_state->streams[k],
-					 &bundle->stream_update,
-					 bundle->surface_updates);
+		dc_commit_updates_for_stream(
+			dm->dc, bundle->surface_updates,
+			dc_state->stream_status->plane_count,
+			dc_state->streams[k], &bundle->stream_update, dc_state);
 	}
 
 cleanup:
@@ -8976,13 +8943,6 @@ static void amdgpu_dm_commit_cursors(struct drm_atomic_state *state)
 			handle_cursor_update(plane, old_plane_state);
 }
 
-static inline uint32_t get_mem_type(struct drm_framebuffer *fb)
-{
-	struct amdgpu_bo *abo = gem_to_amdgpu_bo(fb->obj[0]);
-
-	return abo->tbo.resource ? abo->tbo.resource->mem_type : 0;
-}
-
 static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 				    struct dc_state *dc_state,
 				    struct drm_device *dev,
@@ -9052,8 +9012,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			continue;
 
 		dc_plane = dm_new_plane_state->dc_state;
-		if (!dc_plane)
-			continue;
 
 		bundle->surface_updates[planes_count].surface = dc_plane;
 		if (new_pcrtc_state->color_mgmt_changed) {
@@ -9105,13 +9063,11 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 
 		/*
 		 * Only allow immediate flips for fast updates that don't
-		 * change memory domain, FB pitch, DCC state, rotation or
-		 * mirroring.
+		 * change FB pitch, DCC state, rotation or mirroing.
 		 */
 		bundle->flip_addrs[planes_count].flip_immediate =
 			crtc->state->async_flip &&
-			acrtc_state->update_type == UPDATE_TYPE_FAST &&
-			get_mem_type(old_plane_state->fb) == get_mem_type(fb);
+			acrtc_state->update_type == UPDATE_TYPE_FAST;
 
 		timestamp_ns = ktime_get_ns();
 		bundle->flip_addrs[planes_count].flip_timestamp_in_us = div_u64(timestamp_ns, 1000);
@@ -9244,12 +9200,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		if (acrtc_state->abm_level != dm_old_crtc_state->abm_level)
 			bundle->stream_update.abm_level = &acrtc_state->abm_level;
 
-		mutex_lock(&dm->dc_lock);
-		if ((acrtc_state->update_type > UPDATE_TYPE_FAST) &&
-				acrtc_state->stream->link->psr_settings.psr_allow_active)
-			amdgpu_dm_psr_disable(acrtc_state->stream);
-		mutex_unlock(&dm->dc_lock);
-
 		/*
 		 * If FreeSync state on the stream has changed then we need to
 		 * re-adjust the min/max bounds now that DC doesn't handle this
@@ -9263,13 +9213,16 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 		}
 		mutex_lock(&dm->dc_lock);
+		if ((acrtc_state->update_type > UPDATE_TYPE_FAST) &&
+				acrtc_state->stream->link->psr_settings.psr_allow_active)
+			amdgpu_dm_psr_disable(acrtc_state->stream);
 
-		update_planes_and_stream_adapter(dm->dc,
-					 acrtc_state->update_type,
-					 planes_count,
-					 acrtc_state->stream,
-					 &bundle->stream_update,
-					 bundle->surface_updates);
+		dc_commit_updates_for_stream(dm->dc,
+						     bundle->surface_updates,
+						     planes_count,
+						     acrtc_state->stream,
+						     &bundle->stream_update,
+						     dc_state);
 
 		/**
 		 * Enable or disable the interrupts on the backend.
@@ -9695,11 +9648,12 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 
 
 		mutex_lock(&dm->dc_lock);
-		dc_update_planes_and_stream(dm->dc,
-					    dummy_updates,
-					    status->plane_count,
-					    dm_new_crtc_state->stream,
-					    &stream_update);
+		dc_commit_updates_for_stream(dm->dc,
+						     dummy_updates,
+						     status->plane_count,
+						     dm_new_crtc_state->stream,
+						     &stream_update,
+						     dc_state);
 		mutex_unlock(&dm->dc_lock);
 	}
 
@@ -10203,8 +10157,6 @@ static int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 
 		/* Now check if we should set freesync video mode */
 		if (amdgpu_freesync_vid_mode && dm_new_crtc_state->stream &&
-		    dc_is_stream_unchanged(new_stream, dm_old_crtc_state->stream) &&
-		    dc_is_stream_scaling_unchanged(new_stream, dm_old_crtc_state->stream) &&
 		    is_timing_unchanged_for_freesync(new_crtc_state,
 						     old_crtc_state)) {
 			new_crtc_state->mode_changed = false;
@@ -10588,9 +10540,8 @@ static int dm_update_plane_state(struct dc *dc,
 			return -EINVAL;
 		}
 
-		if (dm_old_plane_state->dc_state)
-			dc_plane_state_release(dm_old_plane_state->dc_state);
 
+		dc_plane_state_release(dm_old_plane_state->dc_state);
 		dm_new_plane_state->dc_state = NULL;
 
 		*lock_and_validation_needed = true;

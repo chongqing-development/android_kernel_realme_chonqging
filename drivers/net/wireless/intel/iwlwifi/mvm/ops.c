@@ -1304,16 +1304,10 @@ static void iwl_mvm_queue_state_change(struct iwl_op_mode *op_mode,
 
 		txq = sta->txq[tid];
 		mvmtxq = iwl_mvm_txq_from_mac80211(txq);
-		if (start)
-			clear_bit(IWL_MVM_TXQ_STATE_STOP_FULL, &mvmtxq->state);
-		else
-			set_bit(IWL_MVM_TXQ_STATE_STOP_FULL, &mvmtxq->state);
+		mvmtxq->stopped = !start;
 
-		if (start && mvmsta->sta_state != IEEE80211_STA_NOTEXIST) {
-			local_bh_disable();
+		if (start && mvmsta->sta_state != IEEE80211_STA_NOTEXIST)
 			iwl_mvm_mac_itxq_xmit(mvm->hw, txq);
-			local_bh_enable();
-		}
 	}
 
 out:

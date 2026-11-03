@@ -186,7 +186,7 @@ static bool backing_data_changed(struct fuse_inode *fi, struct dentry *entry,
 	int err;
 	bool ret = true;
 
-	if (!entry || !fi->backing_inode) {
+	if (!entry) {
 		ret = false;
 		goto put_backing_file;
 	}
@@ -253,7 +253,7 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 	}
 #endif
 	if (time_before64(fuse_dentry_time(entry), get_jiffies_64()) ||
-		 (flags & (LOOKUP_EXCL | LOOKUP_REVAL | LOOKUP_RENAME_TARGET))) {
+		 (flags & (LOOKUP_EXCL | LOOKUP_REVAL))) {
 		struct fuse_entry_out outarg;
 		struct fuse_entry_bpf bpf_arg;
 		FUSE_ARGS(args);
@@ -315,7 +315,7 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			spin_unlock(&fi->lock);
 		}
 		kfree(forget);
-		if (ret == -ENOMEM || ret == -EINTR)
+		if (ret == -ENOMEM)
 			goto out;
 		if (ret || fuse_invalid_attr(&outarg.attr) ||
 		    fuse_stale_inode(inode, outarg.generation, &outarg.attr))
@@ -358,13 +358,8 @@ static void fuse_dentry_release(struct dentry *dentry)
 {
 	struct fuse_dentry *fd = dentry->d_fsdata;
 
-#ifdef CONFIG_FUSE_BPF
 	if (fd && fd->backing_path.dentry)
 		path_put(&fd->backing_path);
-
-	if (fd && fd->bpf)
-		bpf_prog_put(fd->bpf);
-#endif
 
 	kfree_rcu(fd, rcu);
 }
@@ -510,6 +505,7 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	if (name->len > FUSE_NAME_MAX)
 		goto out;
 
+
 	forget = fuse_alloc_forget();
 	err = -ENOMEM;
 	if (!forget)
@@ -528,34 +524,32 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 
 		err = -ENOENT;
 		if (!entry)
-			goto out_put_forget;
+			goto out_queue_forget;
 
 		err = -EINVAL;
 		backing_file = bpf_arg.backing_file;
 		if (!backing_file)
-			goto out_put_forget;
+			goto out_queue_forget;
 
 		if (IS_ERR(backing_file)) {
 			err = PTR_ERR(backing_file);
-			goto out_put_forget;
+			goto out_queue_forget;
 		}
 
 		backing_inode = backing_file->f_inode;
 		*inode = fuse_iget_backing(sb, outarg->nodeid, backing_inode);
 		if (!*inode)
-			goto out_put_forget;
+			goto out;
 
 		err = fuse_handle_backing(&bpf_arg,
 				&get_fuse_inode(*inode)->backing_inode,
 				&get_fuse_dentry(entry)->backing_path);
-		if (!err)
-			err = fuse_handle_bpf_prog(&bpf_arg, NULL,
-					   &get_fuse_inode(*inode)->bpf);
-		if (err) {
-			iput(*inode);
-			*inode = NULL;
-			goto out_put_forget;
-		}
+		if (err)
+			goto out;
+
+		err = fuse_handle_bpf_prog(&bpf_arg, NULL, &get_fuse_inode(*inode)->bpf);
+		if (err)
+			goto out;
 	} else
 #endif
 	{
@@ -575,6 +569,9 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	}
 
 	err = -ENOMEM;
+#ifdef CONFIG_FUSE_BPF
+out_queue_forget:
+#endif
 	if (!*inode && outarg->nodeid) {
 		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
 		goto out;
@@ -728,7 +725,6 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	struct fuse_file *ff;
 	void *security_ctx = NULL;
 	u32 security_ctxlen;
-	bool trunc = flags & O_TRUNC;
 
 	/* Userspace expects S_IFREG in create mode */
 	BUG_ON((mode & S_IFMT) != S_IFREG);
@@ -767,7 +763,7 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	inarg.mode = mode;
 	inarg.umask = current_umask();
 
-	if (fm->fc->handle_killpriv_v2 && trunc &&
+	if (fm->fc->handle_killpriv_v2 && (flags & O_TRUNC) &&
 	    !(flags & O_EXCL) && !capable(CAP_FSETID)) {
 		inarg.open_flags |= FUSE_OPEN_KILL_SUIDGID;
 	}
@@ -830,10 +826,6 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	} else {
 		file->private_data = ff;
 		fuse_finish_open(inode, file);
-		if (fm->fc->atomic_o_trunc && trunc)
-			truncate_pagecache(inode, 0);
-		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
-			invalidate_inode_pages2(inode->i_mapping);
 	}
 	return err;
 
@@ -1789,6 +1781,17 @@ static int fuse_dir_open(struct inode *inode, struct file *file)
 
 static int fuse_dir_release(struct inode *inode, struct file *file)
 {
+#ifdef CONFIG_FUSE_BPF
+	struct fuse_err_ret fer;
+
+	fer = fuse_bpf_backing(inode, struct fuse_release_in,
+		       fuse_releasedir_initialize, fuse_release_backing,
+		       fuse_release_finalize,
+		       inode, file);
+	if (fer.ret)
+		return PTR_ERR(fer.result);
+#endif
+
 	fuse_release_common(file, true);
 	return 0;
 }

@@ -586,8 +586,7 @@ static ssize_t nvmet_ns_revalidate_size_store(struct config_item *item,
 		mutex_unlock(&ns->subsys->lock);
 		return -EINVAL;
 	}
-	if (nvmet_ns_revalidate(ns))
-		nvmet_ns_changed(ns->subsys, ns->nsid);
+	nvmet_ns_revalidate(ns);
 	mutex_unlock(&ns->subsys->lock);
 	return count;
 }

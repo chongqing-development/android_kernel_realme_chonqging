@@ -360,8 +360,9 @@ void mptcp_subflow_reset(struct sock *ssk)
 
 	tcp_send_active_reset(ssk, GFP_ATOMIC);
 	tcp_done(ssk);
-	if (!test_and_set_bit(MPTCP_WORK_CLOSE_SUBFLOW, &mptcp_sk(sk)->flags))
-		mptcp_schedule_work(sk);
+	if (!test_and_set_bit(MPTCP_WORK_CLOSE_SUBFLOW, &mptcp_sk(sk)->flags) &&
+	    schedule_work(&mptcp_sk(sk)->work))
+		return; /* worker will put sk for us */
 
 	sock_put(sk);
 }
@@ -1009,8 +1010,8 @@ static enum mapping_status get_mapping_status(struct sock *ssk,
 				skb_ext_del(skb, SKB_EXT_MPTCP);
 				return MAPPING_OK;
 			} else {
-				if (updated)
-					mptcp_schedule_work((struct sock *)msk);
+				if (updated && schedule_work(&msk->work))
+					sock_hold((struct sock *)msk);
 
 				return MAPPING_DATA_FIN;
 			}
@@ -1113,12 +1114,17 @@ static void mptcp_subflow_discard_data(struct sock *ssk, struct sk_buff *skb,
 /* sched mptcp worker to remove the subflow if no more data is pending */
 static void subflow_sched_work_if_closed(struct mptcp_sock *msk, struct sock *ssk)
 {
+	struct sock *sk = (struct sock *)msk;
+
 	if (likely(ssk->sk_state != TCP_CLOSE))
 		return;
 
 	if (skb_queue_empty(&ssk->sk_receive_queue) &&
-	    !test_and_set_bit(MPTCP_WORK_CLOSE_SUBFLOW, &msk->flags))
-		mptcp_schedule_work((struct sock *)msk);
+	    !test_and_set_bit(MPTCP_WORK_CLOSE_SUBFLOW, &msk->flags)) {
+		sock_hold(sk);
+		if (!schedule_work(&msk->work))
+			sock_put(sk);
+	}
 }
 
 static bool subflow_can_fallback(struct mptcp_subflow_context *subflow)
@@ -1653,16 +1659,14 @@ static void subflow_state_change(struct sock *sk)
 {
 	struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(sk);
 	struct sock *parent = subflow->conn;
-	struct mptcp_sock *msk;
 
 	__subflow_state_change(sk);
 
-	msk = mptcp_sk(parent);
 	if (subflow_simultaneous_connect(sk)) {
 		mptcp_propagate_sndbuf(parent, sk);
 		mptcp_do_fallback(sk);
-		mptcp_rcv_space_init(msk, sk);
-		pr_fallback(msk);
+		mptcp_rcv_space_init(mptcp_sk(parent), sk);
+		pr_fallback(mptcp_sk(parent));
 		subflow->conn_finished = 1;
 		mptcp_set_connected(parent);
 	}
@@ -1678,12 +1682,11 @@ static void subflow_state_change(struct sock *sk)
 
 	subflow_sched_work_if_closed(mptcp_sk(parent), sk);
 
-	/* when the fallback subflow closes the rx side, trigger a 'dummy'
-	 * ingress data fin, so that the msk state will follow along
-	 */
-	if (__mptcp_check_fallback(msk) && subflow_is_done(sk) && msk->first == sk &&
-	    mptcp_update_rcv_data_fin(msk, READ_ONCE(msk->ack_seq), true))
-		mptcp_schedule_work(parent);
+	if (__mptcp_check_fallback(mptcp_sk(parent)) &&
+	    !subflow->rx_eof && subflow_is_done(sk)) {
+		subflow->rx_eof = 1;
+		mptcp_subflow_eof(parent);
+	}
 }
 
 static int subflow_ulp_init(struct sock *sk)

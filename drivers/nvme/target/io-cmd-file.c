@@ -13,9 +13,16 @@
 
 #define NVMET_MIN_MPOOL_OBJ		16
 
-void nvmet_file_ns_revalidate(struct nvmet_ns *ns)
+int nvmet_file_ns_revalidate(struct nvmet_ns *ns)
 {
-	ns->size = i_size_read(ns->file->f_mapping->host);
+	struct kstat stat;
+	int ret;
+
+	ret = vfs_getattr(&ns->file->f_path, &stat, STATX_SIZE,
+			  AT_STATX_FORCE_SYNC);
+	if (!ret)
+		ns->size = stat.size;
+	return ret;
 }
 
 void nvmet_file_ns_disable(struct nvmet_ns *ns)
@@ -33,7 +40,7 @@ void nvmet_file_ns_disable(struct nvmet_ns *ns)
 int nvmet_file_ns_enable(struct nvmet_ns *ns)
 {
 	int flags = O_RDWR | O_LARGEFILE;
-	int ret = 0;
+	int ret;
 
 	if (!ns->buffered_io)
 		flags |= O_DIRECT;
@@ -47,7 +54,9 @@ int nvmet_file_ns_enable(struct nvmet_ns *ns)
 		return ret;
 	}
 
-	nvmet_file_ns_revalidate(ns);
+	ret = nvmet_file_ns_revalidate(ns);
+	if (ret)
+		goto err;
 
 	/*
 	 * i_blkbits can be greater than the universally accepted upper bound,

@@ -486,7 +486,8 @@ static int fxls8962af_set_watermark(struct iio_dev *indio_dev, unsigned val)
 		.sign = 's', \
 		.realbits = 12, \
 		.storagebits = 16, \
-		.endianness = IIO_LE, \
+		.shift = 4, \
+		.endianness = IIO_BE, \
 	}, \
 }
 
@@ -655,10 +656,9 @@ static int fxls8962af_fifo_transfer(struct fxls8962af_data *data,
 	int total_length = samples * sample_length;
 	int ret;
 
-	if (i2c_verify_client(dev) &&
-	    data->chip_info->chip_id == FXLS8962AF_DEVICE_ID)
+	if (i2c_verify_client(dev))
 		/*
-		 * Due to errata bug (only applicable on fxls8962af):
+		 * Due to errata bug:
 		 * E3: FIFO burst read operation error using I2C interface
 		 * We have to avoid burst reads on I2C..
 		 */

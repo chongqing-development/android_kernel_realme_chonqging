@@ -3224,7 +3224,7 @@ static int mlx5e_set_mac(struct net_device *netdev, void *addr)
 		return -EADDRNOTAVAIL;
 
 	netif_addr_lock_bh(netdev);
-	eth_hw_addr_set(netdev, saddr->sa_data);
+	ether_addr_copy(netdev->dev_addr, saddr->sa_data);
 	netif_addr_unlock_bh(netdev);
 
 	mlx5e_nic_set_rx_mode(priv);
@@ -3527,12 +3527,8 @@ static netdev_features_t mlx5e_fix_features(struct net_device *netdev,
 			netdev_warn(netdev, "Disabling rxhash, not supported when CQE compress is active\n");
 	}
 
-	if (mlx5e_is_uplink_rep(priv)) {
+	if (mlx5e_is_uplink_rep(priv))
 		features = mlx5e_fix_uplink_rep_features(netdev, features);
-		features |= NETIF_F_NETNS_LOCAL;
-	} else {
-		features &= ~NETIF_F_NETNS_LOCAL;
-	}
 
 	mutex_unlock(&priv->state_lock);
 
@@ -5008,8 +5004,8 @@ void mlx5e_detach_netdev(struct mlx5e_priv *priv)
 }
 
 static int
-mlx5e_netdev_init_profile(struct net_device *netdev, struct mlx5_core_dev *mdev,
-			  const struct mlx5e_profile *new_profile, void *new_ppriv)
+mlx5e_netdev_attach_profile(struct net_device *netdev, struct mlx5_core_dev *mdev,
+			    const struct mlx5e_profile *new_profile, void *new_ppriv)
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 	int err;
@@ -5025,25 +5021,6 @@ mlx5e_netdev_init_profile(struct net_device *netdev, struct mlx5_core_dev *mdev,
 	err = new_profile->init(priv->mdev, priv->netdev);
 	if (err)
 		goto priv_cleanup;
-
-	return 0;
-
-priv_cleanup:
-	mlx5e_priv_cleanup(priv);
-	return err;
-}
-
-static int
-mlx5e_netdev_attach_profile(struct net_device *netdev, struct mlx5_core_dev *mdev,
-			    const struct mlx5e_profile *new_profile, void *new_ppriv)
-{
-	struct mlx5e_priv *priv = netdev_priv(netdev);
-	int err;
-
-	err = mlx5e_netdev_init_profile(netdev, mdev, new_profile, new_ppriv);
-	if (err)
-		return err;
-
 	err = mlx5e_attach_netdev(priv);
 	if (err)
 		goto profile_cleanup;
@@ -5051,6 +5028,7 @@ mlx5e_netdev_attach_profile(struct net_device *netdev, struct mlx5_core_dev *mde
 
 profile_cleanup:
 	new_profile->cleanup(priv);
+priv_cleanup:
 	mlx5e_priv_cleanup(priv);
 	return err;
 }
@@ -5068,12 +5046,6 @@ int mlx5e_netdev_change_profile(struct mlx5e_priv *priv,
 	mlx5e_detach_netdev(priv);
 	priv->profile->cleanup(priv);
 	mlx5e_priv_cleanup(priv);
-
-	if (mdev->state == MLX5_DEVICE_STATE_INTERNAL_ERROR) {
-		mlx5e_netdev_init_profile(netdev, mdev, new_profile, new_ppriv);
-		set_bit(MLX5E_STATE_DESTROYING, &priv->state);
-		return -EIO;
-	}
 
 	err = mlx5e_netdev_attach_profile(netdev, mdev, new_profile, new_ppriv);
 	if (err) { /* roll back to original profile */
@@ -5134,11 +5106,8 @@ static int mlx5e_suspend(struct auxiliary_device *adev, pm_message_t state)
 	struct net_device *netdev = priv->netdev;
 	struct mlx5_core_dev *mdev = priv->mdev;
 
-	if (!netif_device_present(netdev)) {
-		if (test_bit(MLX5E_STATE_DESTROYING, &priv->state))
-			mlx5e_destroy_mdev_resources(mdev);
+	if (!netif_device_present(netdev))
 		return -ENODEV;
-	}
 
 	mlx5e_detach_netdev(priv);
 	mlx5e_destroy_mdev_resources(mdev);
