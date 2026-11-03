@@ -1781,7 +1781,7 @@ static int mtk_ovl_color_manage(struct mtk_ddp_comp *comp, unsigned int idx,
 	u32 wcg_mask = 0, wcg_value = 0, sel_mask = 0, sel_value = 0, reg = 0;
 	enum mtk_drm_color_mode lcm_cm;
 	enum mtk_drm_dataspace lcm_ds = 0, plane_ds = 0;
-	struct mtk_panel_params *params;
+	struct mtk_panel_params *params = NULL;
 	int i;
 	int ovl_csc_en_cur = 0;
 	unsigned int ocfbn = 0;
