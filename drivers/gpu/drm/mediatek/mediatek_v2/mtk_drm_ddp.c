@@ -12600,6 +12600,49 @@ void mtk_ddp_add_comp_to_path(struct mtk_drm_crtc *mtk_crtc,
 		comp->funcs->connect(comp, NULL, prev, next);
 }
 
+void mtk_ddp_rst_module(struct mtk_drm_crtc *mtk_crtc,
+			enum mtk_ddp_comp_id m,
+			struct cmdq_pkt *handle)
+{
+	resource_size_t reg_pa = 0;
+	unsigned int map;
+	unsigned int offset;
+	unsigned int value;
+
+	if (!mtk_crtc->mmsys_reg_data || !mtk_crtc->mmsys_reg_data->dispsys_map ||
+		!mtk_crtc->mmsys_reg_data->module_rst_offset ||
+		!mtk_crtc->mmsys_reg_data->module_rst_bit)
+		return;
+
+	if (m >= DDP_COMPONENT_ID_MAX)
+		DDPPR_ERR("%s: invalid comp id:%d\n", __func__, m);
+
+	map = mtk_crtc->mmsys_reg_data->dispsys_map[m];
+	if (map == DISPSYS0)
+		reg_pa = mtk_crtc->config_regs_pa;
+	else if (map == DISPSYS1)
+		reg_pa = mtk_crtc->side_config_regs_pa;
+	else if (map == OVLSYS0)
+		reg_pa = mtk_crtc->ovlsys0_regs_pa;
+	else if (map == OVLSYS1)
+		reg_pa = mtk_crtc->ovlsys1_regs_pa;
+
+	offset = mtk_crtc->mmsys_reg_data->module_rst_offset[m];
+	value = mtk_crtc->mmsys_reg_data->module_rst_bit[m];
+
+	if (reg_pa && offset && value) {
+		cmdq_pkt_write(handle, mtk_crtc->gce_obj.base,
+				reg_pa + offset, 0, value);
+		cmdq_pkt_write(handle, mtk_crtc->gce_obj.base,
+				reg_pa + offset, value, value);
+		DDPDBG("%s: %s, reg_pa=0x%08x offset=0x%08x value=0x%08x\n",
+			__func__, mtk_dump_comp_str_id(m), reg_pa, offset, value);
+	} else {
+		DDPDBG("%s: %s not found reg_pa=0x%08x offset=0x%08x value=0x%08x\n",
+			__func__, mtk_dump_comp_str_id(m), reg_pa, offset, value);
+	}
+}
+
 void mtk_ddp_add_comp_to_path_with_cmdq(struct mtk_drm_crtc *mtk_crtc,
 					enum mtk_ddp_comp_id cur,
 					enum mtk_ddp_comp_id prev,

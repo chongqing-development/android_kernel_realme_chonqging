@@ -642,10 +642,12 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 		struct mtk_drm_private *private = NULL;
 		struct drm_crtc *crtc = NULL;
 		struct mtk_drm_crtc *mtk_crtc = NULL;
+		struct mtk_ddp_comp *output_comp = NULL;
 		int ret = 0;
 		int i = 0;
 		int recovery_flg = 0;
 		unsigned int crtc_idx;
+		unsigned int prj_id = get_project();
 
 		if (!esd_ctx) {
 			DDPPR_ERR("%s invalid ESD context, stop thread\n", __func__);
