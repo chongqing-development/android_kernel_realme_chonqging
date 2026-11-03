@@ -44,7 +44,8 @@ $(OUTPUT) $(OUTPUT)/libbpf $(OUTPUT)/libsubcmd:
 	$(Q)mkdir -p $(@)
 
 $(SUBCMDOBJ): fixdep FORCE | $(OUTPUT)/libsubcmd
-	$(Q)$(MAKE) -C $(SUBCMD_SRC) EXTRA_CFLAGS="$(CFLAGS)" OUTPUT=$(abspath $(dir $@))/ $(abspath $@)
+	$(Q)$(MAKE) -C $(SUBCMD_SRC) OUTPUT=$(abspath $(dir $@))/ \
+		EXTRA_CFLAGS="$(SUBCMD_HOSTCFLAGS)" $(abspath $@)
 
 $(BPFOBJ): $(wildcard $(LIBBPF_SRC)/*.[ch] $(LIBBPF_SRC)/Makefile) | $(OUTPUT)/libbpf
 	$(Q)$(MAKE) $(submake_extras) -C $(LIBBPF_SRC)  OUTPUT=$(abspath $(dir $@))/ \
@@ -55,6 +56,8 @@ CFLAGS += -g \
           -I$(srctree)/tools/include/uapi \
           -I$(LIBBPF_SRC) \
           -I$(SUBCMD_SRC)
+
+SUBCMD_HOSTCFLAGS := $(filter --sysroot=% -I%,$(KBUILD_HOSTCFLAGS))
 
 LIBS = -lelf -lz
 
