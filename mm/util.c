@@ -29,6 +29,7 @@
 #include "internal.h"
 #ifndef __GENSYMS__
 #include <trace/hooks/syscall_check.h>
+#include <trace/hooks/mm.h>
 #endif
 
 /**
