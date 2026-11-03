@@ -3354,6 +3354,9 @@ static int ufs_mtk_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	/* Transfer the ufs version to tfa */
 	ufs_mtk_host_pwr_ctrl(HOST_PWR_HCI, true, res);
 
+	if (hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL)
+		ufs_mtk_vreg_set_lpm(hba, false);
+
 	err = ufs_mtk_mphy_power_on(hba, true);
 	if (err)
 		goto fail;
@@ -3917,151 +3920,56 @@ static int ufs_mtk_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM_SLEEP
 int ufs_mtk_system_suspend(struct device *dev)
 {
-	int ret = 0;
 	struct ufs_hba *hba = dev_get_drvdata(dev);
-	struct ufs_mtk_host *host;
-#if defined(CONFIG_UFSFEATURE)
-	struct ufsf_feature *ufsf = ufs_mtk_get_ufsf(hba);
-#endif
-
-	host = ufshcd_get_variant(hba);
-	if (down_trylock(&host->rpmb_sem))
-		return -EBUSY;
-
-#if defined(CONFIG_UFSFEATURE)
-	if (ufsf->hba)
-		ufsf_suspend(ufsf);
-#endif
-
-	/* Check if shutting down */
-	if (!ufshcd_is_user_access_allowed(hba)) {
-		ret = -EBUSY;
-		goto out;
-	}
+	int ret;
 
 	ret = ufshcd_system_suspend(dev);
-
-	if (!ret)
-		ufs_mtk_dev_vreg_set_lpm(hba, true);
-out:
-
-#if defined(CONFIG_UFSFEATURE)
-	/* We assume link is off */
-	if (ret && ufsf)
-		ufsf_resume(ufsf, true);
-#endif
 	if (ret)
-		up(&host->rpmb_sem);
+		return ret;
 
-	return ret;
+	ufs_mtk_vreg_set_lpm(hba, true);
+
+	return 0;
 }
 
 int ufs_mtk_system_resume(struct device *dev)
 {
-	int ret = 0;
 	struct ufs_hba *hba = dev_get_drvdata(dev);
-	struct ufs_mtk_host *host;
-#if defined(CONFIG_UFSFEATURE)
-	struct ufsf_feature *ufsf = ufs_mtk_get_ufsf(hba);
-	bool is_link_off = ufshcd_is_link_off(hba);
-#endif
 
-	ufs_mtk_dev_vreg_set_lpm(hba, false);
+	ufs_mtk_vreg_set_lpm(hba, false);
 
-	ret = ufshcd_system_resume(dev);
-
-#if defined(CONFIG_UFSFEATURE)
-	if (!ret && ufsf->hba)
-		ufsf_resume(ufsf, is_link_off);
-#endif
-
-	host = ufshcd_get_variant(hba);
-	if (!ret)
-		up(&host->rpmb_sem);
-
-	return ret;
+	return ufshcd_system_resume(dev);
 }
 #endif
 
 int ufs_mtk_runtime_suspend(struct device *dev)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 	int ret = 0;
 
-#if defined(CONFIG_UFSFEATURE)
-	struct ufsf_feature *ufsf = ufs_mtk_get_ufsf(hba);
-
-	if (ufsf->hba)
-		ufsf_suspend(ufsf);
-#endif
 	ret = ufshcd_runtime_suspend(dev);
+	if (ret)
+		return ret;
 
-	if (!ret)
-		ufs_mtk_dev_vreg_set_lpm(hba, true);
+	ufs_mtk_vreg_set_lpm(hba, true);
 
-#if defined(CONFIG_UFSFEATURE)
-	/* We assume link is off */
-	if (ret && ufsf->hba)
-		ufsf_resume(ufsf, true);
-#endif
-
-	if (!ret && (host->phy_dev))
-		pm_runtime_put_sync(host->phy_dev);
-
-	return ret;
+	return 0;
 }
 
 int ufs_mtk_runtime_resume(struct device *dev)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
-	int ret = 0;
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
-#if defined(CONFIG_UFSFEATURE)
-	struct ufsf_feature *ufsf = ufs_mtk_get_ufsf(hba);
-	bool is_link_off = ufshcd_is_link_off(hba);
-#endif
+	ufs_mtk_vreg_set_lpm(hba, false);
 
-	if (host->phy_dev)
-		pm_runtime_get_sync(host->phy_dev);
-
-	ufs_mtk_dev_vreg_set_lpm(hba, false);
-
-	ret = ufshcd_runtime_resume(dev);
-
-#if defined(CONFIG_UFSFEATURE)
-	if (!ret && ufsf->hba)
-		ufsf_resume(ufsf, is_link_off);
-#endif
-
-	return ret;
-}
-
-void ufs_mtk_shutdown(struct platform_device *pdev)
-{
-#if defined(CONFIG_UFSFEATURE)
-	struct device *dev = &pdev->dev;
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	struct ufsf_feature *ufsf = ufs_mtk_get_ufsf(hba);
-
-	if (ufsf->hba)
-		ufsf_suspend(ufsf);
-#endif
-
-	/*
-	 * ufshcd_wl_shutdown may run concurrently and have racing problem.
-	 * ufshcd_pltfrm_shutdown only turn off power and clock, which is not
-	 * necessary in shutdwon flow. Beside, ufshcd_shutdown flow is
-	 * incorrect, it will not turn off power and clock after
-	 * ufshcd_wl_shutdown (dev is poweroff and link is off)
-	 * So, it is not necessary and remove ufshcd_pltfrm_shutdown.
-	 */
+	return ufshcd_runtime_resume(dev);
 }
 
 static const struct dev_pm_ops ufs_mtk_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(ufs_mtk_system_suspend, ufs_mtk_system_resume)
-	SET_RUNTIME_PM_OPS(ufs_mtk_runtime_suspend, ufs_mtk_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(ufs_mtk_system_suspend,
+				ufs_mtk_system_resume)
+	SET_RUNTIME_PM_OPS(ufs_mtk_runtime_suspend,
+			   ufs_mtk_runtime_resume, NULL)
 	.prepare	 = ufshcd_suspend_prepare,
 	.complete	 = ufshcd_resume_complete,
 };

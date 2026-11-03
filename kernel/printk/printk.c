@@ -3444,11 +3444,6 @@ EXPORT_SYMBOL_GPL(get_printk_wake_up_time);
 
 static void wake_up_klogd_work_func(struct irq_work *irq_work)
 {
-#ifdef CONFIG_MTK_PRINTK_DEBUG
-	unsigned long long t0;
-	unsigned long long t1;
-	unsigned long long t2;
-#endif
 	int pending = this_cpu_xchg(printk_pending, 0);
 
 #ifdef CONFIG_MTK_PRINTK_DEBUG

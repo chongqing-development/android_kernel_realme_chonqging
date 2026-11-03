@@ -593,8 +593,7 @@ static int mtk_hw_get_value_wrap(struct mtk_pinctrl *hw, unsigned int gpio, int 
 ssize_t mtk_pctrl_show_one_pin(struct mtk_pinctrl *hw,
 	unsigned int gpio, char *buf, unsigned int buf_len)
 {
-	int pullup = 0, pullen = 0, r1 = -1, r0 = -1, len = 0, rsel = -1;
-	int pinmux, val;
+	int pinmux, pullup = 0, pullen = 0, len = 0, r1 = -1, r0 = -1;
 	const struct mtk_pin_desc *desc;
 
 	if (gpio >= hw->soc->npins)
@@ -647,44 +646,20 @@ ssize_t mtk_pctrl_show_one_pin(struct mtk_pinctrl *hw,
 		pullup = 0;
 		pullen = 0;
 	}
-
-	len += snprintf(buf + len, buf_len - len,
-			"%03d: %1d%1d%1d%1d",
+	len += scnprintf(buf + len, buf_len - len,
+			"%03d: %1d%1d%1d%1d%02d%1d%1d%1d%1d",
 			gpio,
 			pinmux,
 			mtk_pctrl_get_direction(hw, gpio),
 			mtk_pctrl_get_out(hw, gpio),
 			mtk_pctrl_get_in(hw, gpio));
 
-	val = mtk_pctrl_get_driving(hw, gpio);
-	if (val >= 0)
-		len += snprintf(buf + len, buf_len - len, "%02d", val);
-	else
-		len += snprintf(buf + len, buf_len - len, "XX");
-
-	val = mtk_pctrl_get_smt(hw, gpio);
-	if (val >= 0)
-		len += snprintf(buf + len, buf_len - len, "%1d", val);
-	else
-		len += snprintf(buf + len, buf_len - len, "X");
-
-	val = mtk_pctrl_get_ies(hw, gpio);
-	if (val >= 0)
-		len += snprintf(buf + len, buf_len - len, "%1d", val);
-	else
-		len += snprintf(buf + len, buf_len - len, "X");
-
-	if (pullen == -1)
-		len += snprintf(buf + len, buf_len - len, "XX");
-	else if (r1 != -1)
-		len += snprintf(buf + len, buf_len - len, "%1d%1d (%1d %1d)",
-			pullen, pullup, r1, r0);
-	else if (rsel != -1)
-		len += snprintf(buf + len, buf_len - len, "%1d%1d (rsel = %d)",
-			pullen, pullup, rsel);
-	else
-		len += snprintf(buf + len, buf_len - len, "%1d%1d",
-			pullen, pullup);
+	if (r1 != -1) {
+		len += scnprintf(buf + len, buf_len - len, " (%1d %1d)\n",
+			r1, r0);
+	} else {
+		len += scnprintf(buf + len, buf_len - len, "\n");
+	}
 
 	return len;
 }

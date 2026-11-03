@@ -1636,7 +1636,7 @@ static int mtk_iommu_set_dev_dma(struct device *dev)
 static int mtk_iommu_attach_device(struct iommu_domain *domain,
 				   struct device *dev)
 {
-	struct mtk_iommu_data *data = dev_iommu_priv_get(dev);
+	struct mtk_iommu_data *data = dev_iommu_priv_get(dev), *frstdata;
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
 	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
 	struct device *m4udev;
@@ -1656,10 +1656,11 @@ static int mtk_iommu_attach_device(struct iommu_domain *domain,
 	mutex_lock(&init_mutexs[tab_id]);
 
 	if (!dom->data) {
-		if (mtk_iommu_domain_finalise(dom, data, domid)) {
-			ret = -ENODEV;
-			goto out_unlock;
-		}
+		/* Data is in the frstdata in sharing pgtable case. */
+		frstdata = mtk_iommu_get_m4u_data();
+
+		if (mtk_iommu_domain_finalise(dom, frstdata, domid))
+			return -ENODEV;
 		dom->data = data;
 		dom->tab_id = MTK_M4U_TO_TAB(fwspec->ids[0]);
 		pr_info("%s, set mtk_iommu_domain, data:(%d,%d), tab_id:%d\n",
@@ -1667,26 +1668,17 @@ static int mtk_iommu_attach_device(struct iommu_domain *domain,
 			data->plat_data->iommu_id, dom->tab_id);
 	}
 
+	mutex_lock(&data->mutex);
 	if (!data->m4u_dom) { /* Initialize the M4U HW */
 		ret = pm_runtime_resume_and_get(m4udev);
-		if (ret < 0) {
-			dev_err(data->dev,
-				"%s, PM fail:%d, dom:%d, iommu_dev:(%d,%d), user_dev:%s\n",
-				__func__, ret, domid, data->plat_data->iommu_type,
-				data->plat_data->iommu_id, dev_name(dev));
-			goto out_unlock;
-		}
-		/*
-		 * Because m4u_dom is used by mtk_iommu_isr, we must set it before
-		 * enable all banks irq to avoid m4u_dom is NULL.
-		 * ex: apu_iommu irq test.
-		 */
-		data->m4u_dom = dom;
+		if (ret < 0)
+			goto err_unlock;
+
 		ret = mtk_iommu_hw_init(data);
 		if (ret) {
 			dev_err(data->dev, "HW init fail %d in attach\n", ret);
 			pm_runtime_put(m4udev);
-			goto out_unlock;
+			goto err_unlock;
 		}
 		writel(data->m4u_dom->ttbr, data->base + REG_MMU_PT_BASE_ADDR);
 
@@ -1705,12 +1697,13 @@ static int mtk_iommu_attach_device(struct iommu_domain *domain,
 #endif
 		pm_runtime_put(m4udev);
 	}
+	mutex_unlock(&data->mutex);
 
 	mtk_iommu_config(data, dev, true, domid);
-	mtk_iommu_set_dev_dma(dev);
+	return 0;
 
-out_unlock:
-	mutex_unlock(&init_mutexs[tab_id]);
+err_unlock:
+	mutex_unlock(&data->mutex);
 	return ret;
 }
 
@@ -1893,6 +1886,9 @@ static struct iommu_device *mtk_iommu_probe_device(struct device *dev)
 	 * All the ports in each a device should be in the same larbs.
 	 */
 	larbid = MTK_M4U_TO_LARB(fwspec->ids[0]);
+	if (larbid >= MTK_LARB_NR_MAX)
+		return ERR_PTR(-EINVAL);
+
 	for (i = 1; i < fwspec->num_ids; i++) {
 		larbidx = MTK_M4U_TO_LARB(fwspec->ids[i]);
 		if (larbid != larbidx) {
@@ -1901,7 +1897,14 @@ static struct iommu_device *mtk_iommu_probe_device(struct device *dev)
 			return ERR_PTR(-EINVAL);
 		}
 	}
+	larbdev = data->larb_imu[larbid].dev;
+	if (!larbdev)
+		return ERR_PTR(-EINVAL);
 
+	link = device_link_add(dev, larbdev,
+			       DL_FLAG_PM_RUNTIME | DL_FLAG_STATELESS);
+	if (!link)
+		dev_err(dev, "Unable to link %s\n", dev_name(larbdev));
 	return &data->iommu;
 }
 
@@ -1937,7 +1940,7 @@ static struct iommu_group *mtk_iommu_device_group(struct device *dev)
 	if (domid < 0)
 		return ERR_PTR(domid);
 
-	mutex_lock(&group_mutexs[domid]);
+	mutex_lock(&data->mutex);
 	group = data->m4u_group[domid];
 	if (!group) {
 		pr_info("%s create group, data:(%d,%d)-->(%d,%d), dev:%s, domid:%d\n", __func__,
@@ -1952,8 +1955,7 @@ static struct iommu_group *mtk_iommu_device_group(struct device *dev)
 	} else {
 		iommu_group_ref_get(group);
 	}
-	mutex_unlock(&group_mutexs[domid]);
-
+	mutex_unlock(&data->mutex);
 	return group;
 }
 
@@ -2663,68 +2665,6 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 		}
 	}
 
-	/*
-	 * Note: we must be find iommu bank from bank1;
-	 * And if iommu upstream, we need to merged with bank0.
-	 */
-	if (MTK_IOMMU_HAS_FLAG(data->plat_data, IOMMU_SEC_EN)) {
-		int bk_nr = of_count_phandle_with_args(dev->of_node,
-					     "mediatek,iommu_banks", NULL);
-
-		if (bk_nr >= IOMMU_BK_NUM || bk_nr < 0) {
-			pr_info("%s, get bank nr fail, %d\n", __func__, bk_nr);
-			goto out;
-		}
-		pr_info("%s, get bank nr:%d\n", __func__, bk_nr);
-
-		for (i = 0; i < bk_nr; i++) {
-			u32 bk_id;
-			resource_size_t	bk_pa;
-			struct resource *bk_res[IOMMU_BK_NUM];
-			struct device_node *bk_node;
-			struct platform_device *bk_dev;
-
-			bk_node = of_parse_phandle(dev->of_node, "mediatek,iommu_banks", i);
-			if (!bk_node) {
-				dev_warn(dev, "Find iommu_bank:%d node fail\n", i);
-				continue;
-			}
-
-			ret = of_property_read_u32(bk_node, "mediatek,bank-id", &bk_id);
-			if (ret) {
-				dev_warn(dev, "Get mediatek,bank-id fail\n");
-				continue;
-			}
-
-			bk_dev = of_find_device_by_node(bk_node);
-			if (!bk_dev) {
-				of_node_put(bk_node);
-				dev_warn(dev, "Find iommu_bank:%d dev fail\n", bk_id);
-				continue;
-			}
-			if (!MTK_IOMMU_HAS_FLAG(data->plat_data, IOMMU_NO_IRQ)) {
-				data->bk_irq[bk_id] = platform_get_irq(bk_dev, 0);
-				if (data->bk_irq[bk_id] < 0) {
-					dev_err(dev, "Get iommu_bank:%d irq fail\n", bk_id);
-					return data->bk_irq[bk_id];
-				}
-			}
-			data->bk_dev[bk_id] = &bk_dev->dev;
-			bk_res[bk_id] = platform_get_resource(bk_dev, IORESOURCE_MEM, 0);
-			bk_pa = bk_res[bk_id]->start;
-			dev_info(data->bk_dev[bk_id], "Get iommu bank:%u(%s) irq:%d ,pa:%pa, success\n",
-				 bk_id, dev_name(data->bk_dev[bk_id]), data->bk_irq[bk_id], &bk_pa);
-		}
-	}
-out:
-	if (MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_BCLK)) {
-		data->bclk = devm_clk_get(dev, "bclk");
-		if (IS_ERR(data->bclk)) {
-			dev_err(dev, "%s,get clk failed\n", __func__);
-			return PTR_ERR(data->bclk);
-		}
-	}
-
 	if (MTK_IOMMU_HAS_FLAG(data->plat_data, PGTABLE_PA_35_EN)) {
 		ret = dma_set_mask(dev, DMA_BIT_MASK(35));
 		if (ret) {
@@ -2733,37 +2673,6 @@ out:
 		}
 	}
 
-	/* mt6873, mt6893, mt6983, mt6879 */
-	if (data->plat_data->iommu_type == APU_IOMMU &&
-	    MTK_IOMMU_HAS_FLAG(data->plat_data, LINK_WITH_APU)) {
-		struct device_node *apunode;
-		struct platform_device *apudev;
-		struct device_link *link;
-
-		apunode = of_parse_phandle(dev->of_node, "mediatek,apu_power", 0);
-		if (!apunode) {
-			dev_warn(dev, "Can't find apu power node!\n");
-			return -EINVAL;
-		}
-		apudev = of_find_device_by_node(apunode);
-		if (!apudev) {
-			of_node_put(apunode);
-			dev_warn(dev, "Find apudev fail!\n");
-			return -ENODEV;
-		}
-
-		link = device_link_add(&apudev->dev, dev, DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME);
-		if (!link)
-			dev_err(dev, "Unable link %s.\n", apudev->name);
-
-		goto skip_smi;
-	}
-
-	if (data->plat_data->iommu_type != MM_IOMMU ||
-	    MTK_IOMMU_HAS_FLAG(data->plat_data, IOMMU_EN_PRE)) {
-		dev_info(dev, "skip smi\n");
-		goto skip_smi;
-	}
 	larb_nr = of_count_phandle_with_args(dev->of_node,
 					     "mediatek,larbs", NULL);
 	if (larb_nr < 0) {
@@ -2863,6 +2772,7 @@ skip_smi:
 	}
 
 	platform_set_drvdata(pdev, data);
+	mutex_init(&data->mutex);
 
 	ret = iommu_device_sysfs_add(&data->iommu, dev, NULL,
 				     "mtk-iommu.%pa", &ioaddr);
@@ -2961,11 +2871,7 @@ static int mtk_iommu_remove(struct platform_device *pdev)
 	iommu_device_sysfs_remove(&data->iommu);
 	iommu_device_unregister(&data->iommu);
 
-	if (iommu_present(&platform_bus_type))
-		bus_set_iommu(&platform_bus_type, NULL);
-
-	if (MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_BCLK))
-		clk_disable_unprepare(data->bclk);
+	list_del(&data->list);
 
 	device_link_remove(data->smicomm_dev, &pdev->dev);
 	pm_runtime_disable(&pdev->dev);
