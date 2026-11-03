@@ -391,6 +391,7 @@ static int mtk_drm_request_eint(struct drm_crtc *crtc)
 	else
 		_set_state(crtc, "mode_te_te1");
 
+
 	return ret;
 }
 
@@ -529,10 +530,12 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 		struct mtk_drm_private *private = NULL;
 		struct drm_crtc *crtc = NULL;
 		struct mtk_drm_crtc *mtk_crtc = NULL;
+		struct mtk_ddp_comp *output_comp;
 		int ret = 0;
 		int i = 0;
 		int recovery_flg = 0;
 		unsigned int crtc_idx;
+		unsigned int prj_id = get_project();
 
 		if (!esd_ctx) {
 			DDPPR_ERR("%s invalid ESD context, stop thread\n", __func__);
@@ -588,6 +591,7 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 		} else if (recovery_flg && ret == 0) {
 			DDPPR_ERR("[ESD%u] esd recovery success\n", crtc_idx);
 			recovery_flg = 0;
+			esd_recovery_flg = 1;
 		}
 		mtk_drm_trace_end();
 
@@ -595,6 +599,15 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
 			mutex_unlock(&private->commit.lock);
 		}
+
+		/* esd check GPIO_TE, after esd recovery, set backlight */
+		if (is_bdg_supported()) {
+			if (esd_recovery_flg) {
+				esd_recovery_flg = 0;
+				mtkfb_set_backlight_level(backlight_level_esd, 0, 0x1);
+			}
+		}
+
 		return 0;
 
 }
@@ -664,21 +677,59 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 	return 0;
 }
 
+void mtk_disp_esd_attach_crtc(struct drm_crtc *crtc, struct mtk_ddp_comp *output_comp)
+{
+	struct mtk_drm_esd_ctx *esd_ctx = NULL;
+	struct mtk_dsi *mtk_dsi;
+
+	if (unlikely(!output_comp)) {
+		DDPPR_ERR("%s invalid output_comp\n", __func__);
+		return;
+	}
+
+	if (unlikely(mtk_ddp_comp_get_type(output_comp->id) != MTK_DSI)) {
+		DDPPR_ERR("%s invalid output_comp\n", __func__);
+		return;
+	}
+
+	mtk_dsi = container_of(output_comp, struct mtk_dsi, ddp_comp);
+	esd_ctx = mtk_dsi->esd_ctx;
+
+	if (unlikely(!esd_ctx)) {
+		DDPPR_ERR("%s invalid esd_ctx\n", __func__);
+		return;
+	}
+
+	esd_ctx->crtc = crtc;
+}
 void mtk_disp_esd_check_switch(struct drm_crtc *crtc, bool enable)
 {
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_drm_esd_ctx *esd_ctx = NULL;
 	struct mtk_ddp_comp *output_comp;
+	struct mtk_panel_ext *panel_ext;
 
 	output_comp = (mtk_crtc) ? mtk_ddp_comp_request_output(mtk_crtc) : NULL;
 
+	if (!mtk_crtc) {
+		DDPMSG("can't find crtc handle\n");
+		return;
+	}
+	panel_ext = mtk_crtc->panel_ext;
 	if (!mtk_drm_helper_get_opt(priv->helper_opt,
 					   MTK_DRM_OPT_ESD_CHECK_RECOVERY))
 		return;
 
 	DDPINFO("%s %u, esd chk active: %d\n", __func__, drm_crtc_index(crtc), enable);
-
+	if (!(panel_ext && panel_ext->params)) {
+		DDPMSG("can't find panel_ext handle\n");
+		return;
+	}
+	if (!_lcm_need_esd_check(panel_ext)) {
+				DDPPR_ERR("%s:no ESD check\n", __func__);
+               return;
+	}
 	if (output_comp && mtk_ddp_comp_get_type(output_comp->id) == MTK_DSI) {
 		struct mtk_dsi *mtk_dsi = container_of(output_comp, struct mtk_dsi, ddp_comp);
 
@@ -752,6 +803,7 @@ static void mtk_disp_esd_chk_init(struct drm_crtc *crtc)
 		DDPPR_ERR("allocate ESD context failed!\n");
 		return;
 	}
+	mutex_init(&esd_ctx->lock);
 	mtk_crtc->esd_ctx = esd_ctx;
 	if (output_comp && mtk_ddp_comp_get_type(output_comp->id) == MTK_DSI) {
 		struct mtk_dsi *dsi = container_of(output_comp, struct mtk_dsi, ddp_comp);

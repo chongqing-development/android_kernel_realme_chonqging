@@ -92,6 +92,8 @@ static void mtk_drm_vdo_mode_leave_idle(struct drm_crtc *crtc)
 		mtk_ddp_comp_io_cmd(comp, handle, DSI_LFR_SET, &en);
 	}
 
+	mtk_sodi_ddren(crtc, handle, true);
+
 	cmdq_pkt_flush(handle);
 	cmdq_pkt_destroy(handle);
 }
@@ -379,6 +381,12 @@ static int mtk_drm_idlemgr_monitor_thread(void *data)
 		}
 
 		if (mtk_crtc_is_frame_trigger_mode(crtc) &&
+				atomic_read(&priv->crtc_rel_present[crtc_id]) <= 0) {
+			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+			continue;
+		}
+
+		if (mtk_crtc_is_frame_trigger_mode(crtc) &&
 				atomic_read(&priv->crtc_rel_present[crtc_id]) <
 				atomic_read(&priv->crtc_present[crtc_id])) {
 			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
@@ -641,6 +649,9 @@ static void mtk_drm_idlemgr_enable_crtc(struct drm_crtc *crtc)
 
 	/* 1. power on mtcmos & init apsrc*/
 	mtk_drm_top_clk_prepare_enable(crtc->dev);
+
+	mtk_crtc_rst_module(crtc);
+
 	mtk_crtc_v_idle_apsrc_control(crtc, NULL, true, true,
 		MTK_APSRC_CRTC_DEFAULT, false);
 
@@ -664,7 +675,7 @@ static void mtk_drm_idlemgr_enable_crtc(struct drm_crtc *crtc)
 		mtk_crtc_prepare_instr(crtc);
 #endif
 
-	/* 5. start trigger loop first to keep gce alive */
+	/* 5. build trigger loop first to keep gce alive */
 	output_comp = mtk_ddp_comp_request_output(mtk_crtc);
 	if (!IS_ERR_OR_NULL(output_comp) &&
 		mtk_ddp_comp_get_type(output_comp->id) == MTK_DSI) {
@@ -673,7 +684,6 @@ static void mtk_drm_idlemgr_enable_crtc(struct drm_crtc *crtc)
 			mtk_crtc_start_sodi_loop(crtc);
 
 		mtk_crtc_start_trig_loop(crtc);
-		mtk_crtc_hw_block_ready(crtc);
 	}
 
 	mutex_lock(&priv->path_ctrl_lock);
@@ -714,10 +724,13 @@ static void mtk_drm_idlemgr_enable_crtc(struct drm_crtc *crtc)
 		mtk_ddp_comp_io_cmd(output_comp, NULL, SET_MMCLK_BY_DATARATE,
 				&en);
 
-	/* 13. set vblank */
+	/* 13. start trigger loop */
+	mtk_crtc_hw_block_ready(crtc);
+
+	/* 14. set vblank */
 	drm_crtc_vblank_on(crtc);
 
-	/* 14. enable fake vsync if need */
+	/* 15. enable fake vsync if need */
 	mtk_drm_fake_vsync_switch(crtc, true);
 
 	DDPINFO("crtc%d do %s-\n", crtc_id, __func__);

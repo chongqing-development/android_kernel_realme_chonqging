@@ -3268,6 +3268,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	 * pages added to the pcp list.
 	 */
 	__mod_zone_page_state(zone, NR_FREE_PAGES, -(i << order));
+
 	spin_unlock(&zone->lock);
 	return allocated;
 }

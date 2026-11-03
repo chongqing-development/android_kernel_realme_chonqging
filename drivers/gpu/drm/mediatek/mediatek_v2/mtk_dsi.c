@@ -17,6 +17,8 @@
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/component.h>
+#include <linux/panic_notifier.h>
+#include <linux/kdebug.h>
 #include <linux/irq.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -47,6 +49,7 @@
 #include "mtk_drm_arr.h"
 #include "mtk_panel_ext.h"
 #include "mtk_disp_notify.h"
+#include "mtk_drm_trace.h"
 #include "mtk_dsi.h"
 #include "mtk_drm_ddp.h"
 #include "platform/mtk_drm_platform.h"
@@ -3350,6 +3353,7 @@ static void mtk_dsi_clk_change_6382(struct mtk_dsi *dsi, int en)
 		cmdq_pkt_flush(cmdq_handle);
 		cmdq_pkt_destroy(cmdq_handle);
 	}
+	printk("[%s : %d] mipi hopping data_rate = %d, Hfp = %d\n",  __func__, __LINE__, data_rate, ext->params->dyn.hfp);
 
 done:
 	CRTC_MMP_EVENT_END(index, clk_change,
@@ -3714,9 +3718,11 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 		}
 	}
 
-	if (mtk_dsi_is_cmd_mode(&dsi->ddp_comp) && dsi->ext && dsi->ext->is_connected == -1)
+	if (mtk_dsi_is_cmd_mode(&dsi->ddp_comp) && dsi->ext && dsi->ext->is_connected != 1) {
 		check_panel_connection(crtc, dsi);
-	DDPINFO("%s -\n", __func__);
+		DDPMSG("%s panel_connection:%d\n", __func__, dsi->ext->is_connected);
+	}
+	DDPMSG("%s -,dsi->output_en = %d\n", __func__,dsi->output_en);
 
 	dsi->pending_switch = false;
 	dsi->output_en = true;
@@ -3799,7 +3805,7 @@ static void mtk_output_dsi_disable(struct mtk_dsi *dsi, struct cmdq_pkt *cmdq_ha
 	unsigned int crtc_idx = 0;
 	bool skip_panel_switch = mtk_dsi_skip_panel_switch(dsi);
 
-	DDPINFO("%s+ doze_enabled:%d\n", __func__, new_doze_state);
+	DDPMSG("%s+ doze_enabled:%d,dsi->output_en = %d\n", __func__, new_doze_state,dsi->output_en);
 	if (!dsi->output_en)
 		return;
 
@@ -3817,7 +3823,7 @@ static void mtk_output_dsi_disable(struct mtk_dsi *dsi, struct cmdq_pkt *cmdq_ha
 	crtc_idx = drm_crtc_index(crtc);
 	if (priv && mtk_drm_helper_get_opt(priv->helper_opt, MTK_DRM_OPT_SPHRT)
 			&& crtc_idx < MAX_CRTC && priv->usage[crtc_idx] == DISP_OPENING) {
-		DDPINFO("%s %d wait for opening\n", __func__, drm_crtc_index(crtc));
+		DDPMSG("%s %d wait for opening\n", __func__, drm_crtc_index(crtc));
 		if (cmdq_handle)
 			cmdq_pkt_destroy(cmdq_handle);
 		goto SKIP_WAIT_FRAME_DONE;
@@ -3956,6 +3962,8 @@ static void mtk_dsi_encoder_disable(struct drm_encoder *encoder)
 			(unsigned long)crtc, index);
 
 	DDPINFO("%s\n", __func__);
+	DDPPR_ERR("mtk_dsi_encoder_disable doze status=%d+\n",mtk_dsi_doze_state(dsi));
+
 	mtk_drm_idlemgr_kick(__func__, crtc, 0);
 
 	/* TODO: assume DSI0 would use for primary display so far */
@@ -4351,7 +4359,7 @@ static int mtk_dsi_stop_vdo_mode(struct mtk_dsi *dsi, void *handle)
 	CRTC_MMP_MARK(index, esd_check, 3, 3);
 	if (is_bdg_supported()) {
 		mipi_dsi_write_6382(dsi, handle, stopdsi, 8);
-		cmdq_pkt_sleep(handle, CMDQ_US_TO_TICK(25), CMDQ_GPR_R07); //need wait 5 lines, 25us
+		cmdq_pkt_sleep(handle, CMDQ_US_TO_TICK(50), CMDQ_GPR_R07); //need wait 5 lines, 25us
 		mipi_dsi_write_6382(dsi, handle, sw_reset0, 8);
 		mipi_dsi_write_6382(dsi, handle, sw_reset1, 8);
 		mipi_dsi_write_6382(dsi, handle, setcmd, 8);
@@ -10759,6 +10767,8 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	if (mtk_disp_num_from_atag() & BIT(alias) ||
 		(mtk_disp_num_from_atag() == 0 && dsi->ddp_comp.id == DDP_COMPONENT_DSI0)) {
 #ifndef CONFIG_MTK_DISP_NO_LK
+		unsigned int alias = mtk_ddp_comp_get_alias(dsi->ddp_comp.id);
+
 		if (disp_helper_get_stage() == DISP_HELPER_STAGE_NORMAL) {
 			phy_power_on(dsi->phy);
 			ret = clk_prepare_enable(dsi->engine_clk);

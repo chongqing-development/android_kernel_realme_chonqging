@@ -59,6 +59,7 @@
 #include "mtk_disp_chist.h"
 #include "mtk_lease.h"
 #include "mtk_disp_oddmr/mtk_disp_oddmr.h"
+#include "mtk_drm_trace.h"
 #include "platform/mtk_drm_platform.h"
 
 #include "mtk_drm_mmp.h"
@@ -1522,9 +1523,9 @@ static void mtk_set_first_config(struct drm_device *dev,
 			DDPMSG("%s, set first config true\n", __func__);
 		}
 	}
-
 	if (is_bdg_supported())
 		bdg_spi_first_init();
+
 }
 
 static void mtk_atomic_complete(struct mtk_drm_private *private,
@@ -1686,7 +1687,6 @@ static void mtk_atomic_check_res_switch(struct mtk_drm_private *private,
 		mtk_crtc = to_mtk_crtc(crtc);
 		mode = &crtc->state->adjusted_mode;
 		old_mode = &old_crtc_state->adjusted_mode;
-
 		if ((drm_crtc_index(crtc) == 0)
 			&& (mtk_crtc->res_switch != RES_SWITCH_NO_USE)
 			&& mtk_crtc->mode_chg){
@@ -6110,7 +6110,7 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	 */
 	mtk_smi_init_power_off();
 	if (is_bdg_supported())
-		bdg_first_init();
+		bdg_first_init(drm);
 	return 0;
 
 err_unset_dma_parms:

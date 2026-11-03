@@ -85,8 +85,9 @@ int mtk_dprec_logger_pr(unsigned int type, char *fmt, ...);
 
 #define DDPIRQ(fmt, arg...)                                                    \
 	do {                                                                   \
+		mtk_dprec_logger_pr(DPREC_LOGGER_DEBUG, fmt, ##arg);   \
 		if (g_irq_log)                                                 \
-			mtk_dprec_logger_pr(DPREC_LOGGER_DEBUG, fmt, ##arg);   \
+			pr_info("[DISP]" pr_fmt(fmt), ##arg);     \
 	} while (0)
 
 #define DDP_MUTEX_LOCK(lock, name, line)                                       \

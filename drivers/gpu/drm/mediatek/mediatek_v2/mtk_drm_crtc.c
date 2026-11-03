@@ -25,6 +25,7 @@
 #include <drm/drm_crtc.h>
 #include <linux/kmemleak.h>
 #include <linux/time.h>
+#include <linux/leds-mtk.h>
 
 #ifndef DRM_CMDQ_DISABLE
 #include <linux/soc/mediatek/mtk-cmdq-ext.h>
@@ -1382,6 +1383,7 @@ int mtk_drm_setbacklight(struct drm_crtc *crtc, unsigned int level,
 			} else
 				comp->funcs->io_cmd(comp, cmdq_handle, DSI_SET_BL, &level);
 		}
+#endif
 	} else {
 
 		/* set backlight and elvss*/
@@ -6577,6 +6579,7 @@ static ktime_t mtk_check_preset_fence_timestamp(struct drm_crtc *crtc)
 
 	return cur_time;
 }
+
 #ifdef MTK_DRM_CMDQ_ASYNC
 #ifdef MTK_DRM_ASYNC_HANDLE
 static void mtk_disp_signal_fence_worker_signal(struct drm_crtc *crtc, struct cmdq_cb_data data)
@@ -9627,22 +9630,28 @@ void mtk_drm_crtc_enable(struct drm_crtc *crtc)
 		mtk_crtc->skip_frame = dsi->pending_switch;
 	}
 
+#ifndef DRM_CMDQ_DISABLE
+	/* 1. power on cmdq client */
+	client = mtk_crtc->gce_obj.client[CLIENT_CFG];
+	cmdq_mbox_enable(client->chan);
+#endif
+
 	if (disp_helper_get_stage() == DISP_HELPER_STAGE_NORMAL) {
-		/* 1. power on mtcmos & init apsrc*/
+		/* 2. power on mtcmos & init apsrc*/
 		mtk_drm_top_clk_prepare_enable(crtc->dev);
+
+		mtk_crtc_rst_module(crtc);
+
 		mtk_crtc_v_idle_apsrc_control(crtc, NULL, true, true,
 			MTK_APSRC_CRTC_DEFAULT, false);
 
-		/* 2. prepare modules would be used in this CRTC */
+		/* 3. prepare modules would be used in this CRTC */
 		mtk_crtc_ddp_prepare(mtk_crtc);
 	}
 
 	mtk_gce_backup_slot_init(mtk_crtc);
 
 #ifndef DRM_CMDQ_DISABLE
-	/* 3. power on cmdq client */
-	client = mtk_crtc->gce_obj.client[CLIENT_CFG];
-	cmdq_mbox_enable(client->chan);
 	CRTC_MMP_MARK((int) crtc_id, enable, 1, 1);
 	if (mtk_drm_helper_get_opt(priv->helper_opt, MTK_DRM_OPT_USE_M4U))
 		mtk_crtc_prepare_instr(crtc);
@@ -9901,6 +9910,8 @@ static void mtk_drm_crtc_update_interface(struct drm_crtc *crtc,
 				mtk_ddp_comp_io_cmd(output_comp, NULL, DSI_GET_TIMING, &timing);
 
 				mtk_drm_crtc_fix_conn_mode(crtc, timing, output_comp);
+
+				mtk_disp_esd_attach_crtc(crtc, output_comp);
 			}
 		}
 	}
@@ -10231,10 +10242,11 @@ void mtk_drm_crtc_init_para(struct drm_crtc *crtc)
 		/* 0:no use, 1:on ddic, 2:on ap */
 		DDPMSG("%s resolution switch type: %d\n", __func__, mtk_crtc->res_switch);
 
-		if (mtk_crtc->res_switch == RES_SWITCH_ON_AP)
+		if (mtk_crtc->res_switch == RES_SWITCH_ON_AP) {
 			mtk_drm_crtc_get_panel_original_size(crtc,
 				&mtk_crtc->scaling_ctx.lcm_width,
 				&mtk_crtc->scaling_ctx.lcm_height);
+		}
 
 		/* fill connector prop caps for hwc */
 		mtk_ddp_comp_io_cmd(comp, NULL, DSI_FILL_CONNECTOR_PROP_CAPS, mtk_crtc);
@@ -13164,6 +13176,7 @@ static void mtk_atomic_hbm_bypass_pq(struct drm_crtc *crtc,
 				mtk_ddp_comp_bypass(comp, en, handle);
 		}
 	}
+
 
 	if (mtk_crtc->is_dual_pipe) {
 		for_each_comp_in_dual_pipe(comp, mtk_crtc, i, j) {
